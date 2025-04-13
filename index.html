@@ -1,1630 +1,204 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AeroHearts: Celestial Chase (Refactored)</title>
-    <style>
-        body { margin: 0; overflow: hidden; background-color: #000; }
-        canvas { display: block; }
-        #ui-container {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none; /* Allow clicks to pass through UI elements */
-            color: white;
-            font-family: 'Arial', sans-serif;
-            text-shadow: 1px 1px 2px black;
-            overflow: hidden; /* Prevent indicators going outside */
-        }
-        #info {
-            position: absolute;
-            top: 10px;
-            width: 100%;
-            text-align: center;
-            font-size: 20px;
-            z-index: 100;
-        }
-        #health-bar-container {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            width: 150px;
-            height: 20px;
-            background-color: rgba(100, 0, 0, 0.7);
-            border-radius: 5px;
-            border: 1px solid rgba(255, 255, 255, 0.5);
-            z-index: 100;
-            overflow: hidden;
-        }
-        #health-bar {
-            width: 100%;
-            height: 100%;
-            background-color: #00ff00;
-            border-radius: 4px;
-            transition: width 0.2s ease-out;
-        }
-         #health-text {
-            position: absolute;
-            top: 32px;
-            left: 10px;
-            font-size: 14px;
-            z-index: 100;
-         }
-        #controls-info {
-            position: absolute;
-            bottom: 10px;
-            left: 10px;
-            font-size: 14px;
-            background-color: rgba(0,0,0,0.6);
-            padding: 8px;
-            border-radius: 5px;
-            line-height: 1.4;
-            z-index: 100;
-        }
-        #message-box {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background-color: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 30px;
-            border-radius: 10px;
-            font-size: 24px;
-            font-weight: bold;
-            text-align: center;
-            display: none;
-            z-index: 200;
-            border: 2px solid white;
-        }
-        #damage-flash {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(255, 0, 0, 0.5);
-            display: none;
-            z-index: 150;
-            pointer-events: none;
-        }
-        /* Enemy Indicator Styles */
-        .enemy-indicator {
-            position: absolute;
-            width: 0;
-            height: 0;
-            border-left: 8px solid transparent; /* Arrow shape */
-            border-right: 8px solid transparent;
-            border-bottom: 16px solid rgba(255, 0, 0, 0.8); /* Red arrow */
-            transform-origin: center bottom;
-            display: none; /* Hidden by default */
-            z-index: 90;
-            pointer-events: none;
-        }
-        /* Controller status */
-         #controller-status {
-            position: absolute;
-            bottom: 10px;
-            right: 10px;
-            font-size: 12px;
-            color: #aaa;
-            z-index: 100;
-         }
-         /* Stall warning */
-         #stall-warning {
-            position: absolute;
-            top: 40%;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 30px;
-            color: yellow;
-            font-weight: bold;
-            text-shadow: 2px 2px 4px black;
-            display: none;
-            z-index: 110;
-         }
-        #flight-indicators {
-            position: absolute;
-            bottom: 10px;
-            right: 10px; /* Positioned near controller status initially */
-            font-size: 16px;
-            text-align: right;
-            background-color: rgba(0,0,0,0.6);
-            padding: 8px;
-            border-radius: 5px;
-            line-height: 1.5;
-            z-index: 100;
-        }
-        #flight-indicators div {
-            margin-bottom: 4px;
-        }
-        #flight-indicators div:last-child {
-            margin-bottom: 0;
-        }
-        #autopilot-status {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            font-size: 16px;
-            font-weight: bold;
-            color: cyan;
-            z-index: 100;
-            display: none; /* Hidden by default */
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Game Hub</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Custom styles for focus indication */
+    .controller-focus {
+      outline: 4px solid rgb(59 130 246);
+      /* Blue outline */
+      outline-offset: 2px;
+      background-color: rgba(59, 130, 246, 0.1);
+      /* Light blue background */
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      /* Use Inter font */
+    }
+  </style>
 </head>
-<body>
-    <div id="ui-container">
-        <div id="info">Score: 0</div>
-        <div id="enemy-count" style="position: absolute; top: 40px; width: 100%; text-align: center; font-size: 16px; z-index: 100;">Enemies: 0</div>
-        <div id="health-bar-container">
-            <div id="health-bar"></div>
-        </div>
-        <div id="health-text">HP: 100/100</div>
-        <div id="controls-info">
-            Controls:<br>
-            W/S: Pitch Up/Down (Flight)<br>
-            A/D: Roll Left/Right (Flight)<br>
-            Q/E: Yaw Left/Right<br>
-            Shift: Increase Speed / Takeoff<br>
-            Ctrl: Decrease Speed<br>
-            G: Toggle Landing Gear<br>
-            Space: Fire Projectile<br>
-            Arrow Up/Down: Elevator Trim Up/Down<br>
-            R: Reset Game (After Game Over)<br>
-            ---<br>
-            Gamepad:<br>
-            L Stick: Pitch/Roll<br>
-            R Stick: Yaw<br>
-            R Trigger: Accelerate<br>
-            L Trigger: Decelerate<br>
-            LB/RB: Elevator Trim Down/Up<br>
-            A/X: Fire<br>
-            Y/Triangle: Gear
-        </div>
-        <div id="message-box">Message Here</div>
-        <div id="damage-flash"></div>
-        <div id="indicators-container"></div>
-        <div id="controller-status">No Controller Detected</div>
-        <div id="stall-warning">STALL!</div>
-        <div id="flight-indicators">
-            <div id="throttle-indicator">THR: 0%</div>
-            <div id="altitude-indicator">ALT: 0 m</div>
-            <div id="speed-indicator">SPD: 0 kph</div>
-            <div id="trim-indicator">TRIM: 0%</div>
-        </div>
-        <div id="autopilot-status">AUTOPILOT ON</div>
-    </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script>
-        // --- Constants ---
-        const GROUND_LEVEL = 5;
-        const LANDING_GEAR_HEIGHT = 3;
-        const MAX_VERTICAL_LANDING_SPEED = 5; // Max descent rate for safe landing (m/s)
-        const TAKEOFF_SPEED = 40;
-        const PLAYER_PROJECTILE_SPEED = 350;
-        const ENEMY_PROJECTILE_SPEED = 250;
-        const PLAYER_FIRE_COOLDOWN = 0.15;
-        const ENEMY_FIRE_COOLDOWN = 1.5;
-        const ENEMY_SHOOT_RANGE = 800;
-        const ENEMY_SHOOT_ANGLE = Math.PI / 4;
-        const PROJECTILE_LIFETIME = 4;
-        const PLAYER_INITIAL_HEALTH = 100;
-        const ENEMY_PROJECTILE_DAMAGE = 10;
-        const COLLISION_DAMAGE = 25;
-        const ROLL_INDUCED_TURN_FACTOR = 0.4;
-        const TERRAIN_COLLISION_PADDING = 2;
-        const MAX_INDICATORS = 10;
-        const GAMEPAD_DEADZONE = 0.15;
-        const TREE_COUNT = 30000;
-        const MAX_ANGLE_OF_ATTACK = Math.PI / 9; // 20 degrees: Stall trigger
-        const GRAVITY = 9.8; // Acceleration due to gravity (m/s^2)
-        const TRIM_AUTHORITY = 0.4; // How much trim affects pitch input signal
-        const LOW_SPEED_PITCH_FACTOR = 3000; // Strength of the low-speed nose-down moment
-        const LOW_SPEED_THRESHOLD = 60; // Speed (m/s) below which the effect starts kicking in
-        // --- Flight Physics Constants ---
-        const AIR_DENSITY = 1.225; // kg/m^3 (at sea level)
-        const WING_AREA = 18.0; // m^2 (example value)
-        const PLANE_MASS = 1000; // kg (example value)
-        const MAX_THRUST = 25000; // Newtons (example engine power)
-        const COL_OFFSET_Z = 0.02; // Center of Lift offset from CoM (meters, negative is behind CoM) - STABILITY
-        const MOMENT_OF_INERTIA_PITCH = 1800; // kg*m^2 (example value for pitch axis)
-        const PITCH_CONTROL_AUTHORITY = 2500; // Factor for elevator input/trim moment (Nm per unit input)
-        const PITCH_DAMPING = 0.5; // Damping factor for pitch rotation speed
-        const TAIL_STABILITY_FACTOR = 1; // Factor for tail's inherent AoA-based stability moment (Nm / rad / dynamic_pressure_unit?) - Needs tuning
-        
-        // --- Basic Setup ---
-        let scene, camera, renderer;
-        let playerPlane, thirdPersonCameraOffset, landingGearGroup;
-        let score = 0;
-        const scoreElement = document.getElementById('info');
-        const healthBarElement = document.getElementById('health-bar');
-        const healthTextElement = document.getElementById('health-text');
-        const messageBoxElement = document.getElementById('message-box');
-        const damageFlashElement = document.getElementById('damage-flash');
-        const indicatorsContainer = document.getElementById('indicators-container');
-        const controllerStatusElement = document.getElementById('controller-status');
-        const stallWarningElement = document.getElementById('stall-warning');
-        const throttleIndicatorElement = document.getElementById('throttle-indicator');
-        const altitudeIndicatorElement = document.getElementById('altitude-indicator');
-        const speedIndicatorElement = document.getElementById('speed-indicator');
-        const trimIndicatorElement = document.getElementById('trim-indicator');
-        const autopilotStatusElement = document.getElementById('autopilot-status'); // Added Autopilot Status Element
-        const enemyCountElement = document.getElementById('enemy-count'); // Added enemy count element
-        const clock = new THREE.Clock();
-        let rings = [];
-        let enemies = [];
-        let clouds = [];
-        let projectiles = [];
-        let enemyIndicators = [];
-        let runwayAreas = [];
-        let gameActive = true;
-        let animationFrameId;
-        let gamepad = null;
-        let instancedTrunks, instancedLeaves;
-
-        // Player state variables
-        const player = {
-            speed: 50, // Current speed magnitude (updated from velocity)
-            velocity: new THREE.Vector3(), // Current velocity vector
-            rotationSpeed: { pitch: 0, yaw: 0, roll: 0 }, // Current angular velocities
-            maxSpeed: 200, // Max speed limit (less relevant with physics)
-            minSpeed: 10, // Min speed limit (less relevant with physics)
-            acceleration: 50, // Base acceleration factor (used for throttle scaling)
-            rollSpeed: Math.PI / 2, // Max roll input rate
-            pitchSpeed: Math.PI / 2, // Max pitch input rate
-            yawSpeed: Math.PI / 3, // Max yaw input rate
-            gearDown: false, // Landing gear state
-            lastFireTime: 0, // Cooldown timer for firing
-            health: PLAYER_INITIAL_HEALTH, // Current health
-            maxHealth: PLAYER_INITIAL_HEALTH, // Max health
-            lastHitTime: 0, // Cooldown timer for collision damage
-            throttleLevel: 0.75, // Current throttle setting (0-1)
-            mass: PLANE_MASS, // Plane mass
-            elevatorTrim: 0, // Current elevator trim setting (-1 to 1)
-            momentOfInertiaPitch: MOMENT_OF_INERTIA_PITCH, // Pitch inertia
-            currentState: null, // Holds the current flight state object (Landed, Normal, Stalled, Autopilot)
-            previousState: null // Stores the state before autopilot was engaged
-        };
-
-        // Input state object
-        const inputState = { pitch: 0, roll: 0, yaw: 0, throttle: 0, fire: false, gear: false, reset: false, trimAdjust: 0, autopilotToggle: false };
-        let gearPressedLastFrame = false;
-
-        // Keyboard Input Listeners
-        const keys = {};
-        document.addEventListener('keydown', (event) => { const key = event.key.toLowerCase(); keys[key] = true; });
-        document.addEventListener('keyup', (event) => keys[event.key.toLowerCase()] = false);
-
-        // Gamepad Connection Listeners
-        window.addEventListener("gamepadconnected", (event) => { console.log("Gamepad connected:", event.gamepad.id); gamepad = event.gamepad; controllerStatusElement.textContent = `Controller: ${gamepad.id}`; });
-        window.addEventListener("gamepaddisconnected", (event) => { console.log("Gamepad disconnected:", event.gamepad.id); if (gamepad && gamepad.index === event.gamepad.index) { gamepad = null; controllerStatusElement.textContent = "No Controller Detected"; } });
-
-
-        // --- Initialization and Scene Setup ---
-        function init() {
-            console.log("Initializing game (v9 - Refactored Flight States)...");
-            gameActive = true; score = 0; player.health = PLAYER_INITIAL_HEALTH; player.gearDown = false; player.speed = 50; player.lastFireTime = 0; player.lastHitTime = 0; player.elevatorTrim = 0; player.velocity.set(0,0,0); player.rotationSpeed = { pitch: 0, yaw: 0, roll: 0 };
-            updateHealthDisplay(); scoreElement.textContent = `Score: ${score}`; messageBoxElement.style.display = 'none'; stallWarningElement.style.display = 'none'; controllerStatusElement.textContent = gamepad ? `Controller: ${gamepad.id}` : "No Controller Detected";
-
-            scene = new THREE.Scene();
-            scene.fog = new THREE.Fog(0x87CEEB, 1000, 5000);
-
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 10000);
-            thirdPersonCameraOffset = new THREE.Vector3(0, 10, -25);
-
-             if (!renderer) { renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setSize(window.innerWidth, window.innerHeight); renderer.setPixelRatio(window.devicePixelRatio); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; document.body.appendChild(renderer.domElement); } else { renderer.setSize(window.innerWidth, window.innerHeight); }
-
-             const lightsToRemove = scene.children.filter(obj => obj.isLight); lightsToRemove.forEach(light => scene.remove(light));
-             const ambientLight = new THREE.AmbientLight(0xabcdef, 0.7); scene.add(ambientLight);
-             const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8); directionalLight.position.set(300, 500, 400); directionalLight.castShadow = true; directionalLight.shadow.mapSize.width = 2048; directionalLight.shadow.mapSize.height = 2048; directionalLight.shadow.camera.near = 0.5; directionalLight.shadow.camera.far = 5000; directionalLight.shadow.camera.left = -2000; directionalLight.shadow.camera.right = 2000; directionalLight.shadow.camera.top = 2000; directionalLight.shadow.camera.bottom = -2000; scene.add(directionalLight);
-
-            clearSceneObjects();
-            createPlayerPlane();
-            createEnvironment();
-            createHeartRings(50);
-            createClouds(150);
-            spawnEnemies(70);
-            updateEnemyCountDisplay(); // Initial enemy count display
-            createEnemyIndicators();
-
-            // Initialize player state - START IN AIR
-            const initialAltitude = 100;
-            const initialSpeed = 70; // Start with some forward speed (m/s)
-            player.currentState = new NormalFlightState(); // Start in normal flight
-            playerPlane.position.set(0, initialAltitude, 0); // Start at 100m altitude
-            player.velocity.set(0, 0, initialSpeed); // Set initial forward velocity
-            player.speed = initialSpeed; // Sync speed property
-            player.gearDown = false; // Start with gear up
-            landingGearGroup.visible = false; // Hide gear mesh
-
-            window.removeEventListener('resize', onWindowResize);
-            window.addEventListener('resize', onWindowResize, false);
-
-             if (animationFrameId) cancelAnimationFrame(animationFrameId);
-             animate();
-        }
-
-        function clearSceneObjects() {
-             console.log("Clearing scene objects..."); const disposeObject = (obj) => { if (obj.geometry) obj.geometry.dispose(); if (obj.material) { if (Array.isArray(obj.material)) { obj.material.forEach(mat => {if(mat) mat.dispose();}); } else { if(obj.material.map) obj.material.map.dispose(); obj.material.dispose(); } } };
-             if (instancedTrunks) { scene.remove(instancedTrunks); disposeObject(instancedTrunks); instancedTrunks = null; }
-             if (instancedLeaves) { scene.remove(instancedLeaves); disposeObject(instancedLeaves); instancedLeaves = null; }
-             [...projectiles, ...enemies, ...rings, ...clouds].forEach(obj => { if (obj && scene) { scene.remove(obj); disposeObject(obj); } });
-             if (playerPlane && scene) { scene.remove(playerPlane); playerPlane.traverse(child => { if (child.isMesh) disposeObject(child); }); }
-             projectiles.length = 0; enemies.length = 0; rings.length = 0; clouds.length = 0; playerPlane = null; runwayAreas = [];
-             indicatorsContainer.innerHTML = ''; enemyIndicators = [];
-             console.log("Scene objects cleared.");
-        }
-
-
-        // --- Object Creation Functions (No changes unless specified) ---
-        function createPlayerPlane() { /* ... (No changes) ... */
-            const bodyMat=new THREE.MeshStandardMaterial({color:16737716,roughness:.5,metalness:.3});const wingMat=new THREE.MeshStandardMaterial({color:16745665,roughness:.5,metalness:.3});const cockpitMat=new THREE.MeshStandardMaterial({color:4473855,roughness:.1,metalness:.1,transparent:!0,opacity:.6});const gearMat=new THREE.MeshStandardMaterial({color:6710886,roughness:.4,metalness:.5});playerPlane=new THREE.Group,playerPlane.userData={type:"player"};const fuselageGeo=new THREE.BoxGeometry(3,2,10),fuselage=new THREE.Mesh(fuselageGeo,bodyMat);fuselage.castShadow=!0,fuselage.receiveShadow=!0,playerPlane.add(fuselage);const wingGeo=new THREE.BoxGeometry(12,.5,4),mainWing=new THREE.Mesh(wingGeo,wingMat);mainWing.position.set(0,0,0),mainWing.castShadow=!0,mainWing.receiveShadow=!0,playerPlane.add(mainWing);const tailWingGeo=new THREE.BoxGeometry(6,.3,2),tailWing=new THREE.Mesh(tailWingGeo,wingMat);tailWing.position.set(0,1,-5.5),tailWing.castShadow=!0,tailWing.receiveShadow=!0,playerPlane.add(tailWing);const tailFinGeo=new THREE.BoxGeometry(.5,2.5,1.5),tailFin=new THREE.Mesh(tailFinGeo,wingMat);tailFin.position.set(0,1.5,-5.5),tailFin.castShadow=!0,tailFin.receiveShadow=!0,playerPlane.add(tailFin);const cockpitGeo=new THREE.SphereGeometry(1.5,16,8,0,2*Math.PI,0,Math.PI/2),cockpit=new THREE.Mesh(cockpitGeo,cockpitMat);cockpit.position.set(0,1,3),cockpit.rotation.x=-Math.PI/10,playerPlane.add(cockpit);landingGearGroup=new THREE.Group;const wheelGeo=new THREE.CylinderGeometry(.5,.5,.3,16),strutGeo=new THREE.CylinderGeometry(.15,.15,LANDING_GEAR_HEIGHT,8),frontStrut=new THREE.Mesh(strutGeo,gearMat),frontWheel=new THREE.Mesh(wheelGeo,gearMat);frontWheel.rotation.z=Math.PI/2,frontStrut.position.set(0,-LANDING_GEAR_HEIGHT/2,3),frontWheel.position.set(0,-LANDING_GEAR_HEIGHT,3),landingGearGroup.add(frontStrut),landingGearGroup.add(frontWheel);const rearStrutL=new THREE.Mesh(strutGeo,gearMat),rearWheelL=new THREE.Mesh(wheelGeo,gearMat);rearWheelL.rotation.z=Math.PI/2,rearStrutL.position.set(-2.5,-LANDING_GEAR_HEIGHT/2,-1),rearWheelL.position.set(-2.5,-LANDING_GEAR_HEIGHT,-1),landingGearGroup.add(rearStrutL),landingGearGroup.add(rearWheelL);const rearStrutR=new THREE.Mesh(strutGeo,gearMat),rearWheelR=new THREE.Mesh(wheelGeo,gearMat);rearWheelR.rotation.z=Math.PI/2,rearStrutR.position.set(2.5,-LANDING_GEAR_HEIGHT/2,-1),rearWheelR.position.set(2.5,-LANDING_GEAR_HEIGHT,-1),landingGearGroup.add(rearStrutR),landingGearGroup.add(rearWheelR);landingGearGroup.visible=player.gearDown,playerPlane.add(landingGearGroup);playerPlane.position.set(0,100,0),playerPlane.rotation.set(0,0,0),playerPlane.rotation.order="YXZ",scene.add(playerPlane);console.log("Player plane created.");
-         }
-
-         function createEnemyPlane(colorHex) { /* ... (No changes) ... */
-            const isWhite=16777215===colorHex,bodyMat=new THREE.MeshStandardMaterial({color:colorHex,roughness:isWhite?.7:.9,metalness:isWhite?.1:0}),wingMat=new THREE.MeshStandardMaterial({color:isWhite?14540253:3355443,roughness:isWhite?.7:.9,metalness:isWhite?.1:0});const enemyPlane=new THREE.Group;enemyPlane.userData={type:"enemy"};const fuselageGeo=new THREE.BoxGeometry(2.5,1.8,9),fuselage=new THREE.Mesh(fuselageGeo,bodyMat);fuselage.castShadow=!0,enemyPlane.add(fuselage);const wingGeo=new THREE.BoxGeometry(10,.4,3),mainWing=new THREE.Mesh(wingGeo,wingMat);mainWing.castShadow=!0,enemyPlane.add(mainWing);const tailWingGeo=new THREE.BoxGeometry(5,.25,1.8),tailWing=new THREE.Mesh(tailWingGeo,wingMat);tailWing.position.set(0,.8,-5),tailWing.castShadow=!0,enemyPlane.add(tailWing);const tailFinGeo=new THREE.BoxGeometry(.4,2,1.3),tailFin=new THREE.Mesh(tailFinGeo,wingMat);tailFin.position.set(0,1.2,-5),tailFin.castShadow=!0,enemyPlane.add(tailFin);return enemyPlane.rotation.order="YXZ",enemyPlane.userData={...enemyPlane.userData,speed:40*Math.random()+40,velocity:new THREE.Vector3(0,0,1),turnRate:Math.PI/6,targetDirection:new THREE.Vector3(0,0,1),lastFireTime:0,fireCooldown:ENEMY_FIRE_COOLDOWN+Math.random()-.5},enemyPlane
-          }
-
-        function spawnEnemies(count) { /* ... (No changes) ... */
-            console.log(`Spawning ${count} enemies...`);const colors=[16777215,2236962];for(let i=0;i<count;i++){const color=colors[i%colors.length],enemy=createEnemyPlane(color);console.log(`  - Spawning enemy ${i+1} with color ${color.toString(16)}`);const radius=2e3*Math.random()+1e3,angle=2*Math.random()*Math.PI,height=500*Math.random()+200;enemy.position.set(Math.cos(angle)*radius,height,Math.sin(angle)*radius),enemy.rotation.y=2*Math.random()*Math.PI,enemies.push(enemy),scene.add(enemy)}
-         }
-
-        function createEnvironment() { /* ... (No changes) ... */
-             const groundGeo=new THREE.PlaneGeometry(6e3,6e3,100,100),groundMat=new THREE.MeshStandardMaterial({color:0x8FBC8F, roughness:.95, metalness:0});
-             const ground=new THREE.Mesh(groundGeo,groundMat);ground.rotation.x=-Math.PI/2,ground.receiveShadow=!0,scene.add(ground);
-             const loader = new THREE.CubeTextureLoader();
-             console.log("Loading skybox textures...");
-             const texture = loader.setPath('https://threejs.org/examples/textures/cube/SwedishRoyalCastle/')
-                 .load(['px.jpg','nx.jpg','py.jpg','ny.jpg','pz.jpg','nz.jpg'],
-                 ()=>{console.log("Skybox textures loaded successfully.");},undefined,(err)=>{console.error("Skybox texture loading failed:",err);});
-             scene.background = texture; scene.environment = texture;
-             console.log("Creating runways...");
-             runwayAreas = [];
-             const runwayLength = 1000;
-             const runwayWidth = 60;
-             const runwayMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.8 });
-             const runwayGeo = new THREE.PlaneGeometry(runwayWidth, runwayLength);
-             const runwayPositions = [
-                 { x: 0, z: 500, rotationY: 0 },
-                 { x: 1500, z: -1000, rotationY: Math.PI / 4 },
-                 { x: -1000, z: -1500, rotationY: -Math.PI / 6 }
-             ];
-             runwayPositions.forEach(pos => {
-                 const runway = new THREE.Mesh(runwayGeo, runwayMat);
-                 runway.rotation.x = -Math.PI / 2;
-                 runway.rotation.z = pos.rotationY;
-                 runway.position.set(pos.x, GROUND_LEVEL + 0.1, pos.z);
-                 runway.receiveShadmow = true;
-                 scene.add(runway);
-                 const halfLength = runwayLength / 2;
-                 const halfWidth = runwayWidth / 2;
-                 const runwayBox = new THREE.Box3(
-                     new THREE.Vector3(pos.x - halfWidth, GROUND_LEVEL, pos.z - halfLength),
-                     new THREE.Vector3(pos.x + halfWidth, GROUND_LEVEL + 1, pos.z + halfLength)
-                 );
-                 runwayAreas.push(runwayBox);
-                 console.log(`  Runway created at ${pos.x}, ${pos.z}`);
-             });
-             const isInsideRunway = (x, z) => {
-                 for (const area of runwayAreas) {
-                     if (x > area.min.x && x < area.max.x && z > area.min.z && z < area.max.z) {
-                         return true;
-                     }
-                 }
-                 return false;
-             };
-            const mountainMat=new THREE.MeshStandardMaterial({color:0x8B8378, roughness:.85});
-            const houseMat=new THREE.MeshStandardMaterial({color:0xaaaaaa, roughness:.7});
-            const terrainArea=5500;
-            const mountains = [];
-            console.log("Creating mountains and houses...");
-            for(let i=0;i<70;i++){
-                const posX = (Math.random() - 0.5) * terrainArea;
-                const posZ = (Math.random() - 0.5) * terrainArea;
-                if (isInsideRunway(posX, posZ)) continue;
-                let feature = null;
-                let featureHeight = 0;
-                let featureRadius = 0;
-                if (i < 25) {
-                    featureHeight = Math.random() * 600 + 150;
-                    featureRadius = Math.random() * 200 + 80;
-                    const mountainGeo = new THREE.ConeGeometry(featureRadius, featureHeight, 16);
-                    feature = new THREE.Mesh(mountainGeo, mountainMat);
-                    feature.position.set(posX, featureHeight / 2, posZ);
-                    feature.userData = { type: "terrain", height: featureHeight, radius: featureRadius, isMountain: true };
-                    mountains.push({ x: posX, z: posZ, radius: featureRadius });
-                } else if (i >= 60) {
-                    const hSizeX = Math.random() * 10 + 8;
-                    const hSizeY = Math.random() * 5 + 5;
-                    const hSizeZ = Math.random() * 10 + 8;
-                    featureHeight = hSizeY;
-                    featureRadius = Math.max(hSizeX, hSizeZ) / 2;
-                    const houseGeo = new THREE.BoxGeometry(hSizeX, hSizeY, hSizeZ);
-                    feature = new THREE.Mesh(houseGeo, houseMat);
-                    feature.position.set(posX, featureHeight / 2, posZ);
-                    feature.userData = { type: "terrain", height: featureHeight, radius: featureRadius };
-                }
-                if (feature) {
-                    feature.castShadow = true;
-                    feature.receiveShadow = true;
-                    scene.add(feature);
-                }
-            }
-            console.log(`Creating ${TREE_COUNT} instanced trees...`);
-            const treeTrunkMat = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.9 });
-            const treeLeavesMat = new THREE.MeshStandardMaterial({ color: 0x228B22, roughness: 0.9 });
-            const baseTrunkHeight = 15;
-            const baseTrunkRadius = 1;
-            const baseLeavesHeight = baseTrunkHeight * 1.5;
-            const baseLeavesRadius = baseTrunkRadius * 4;
-            const trunkGeo = new THREE.CylinderGeometry(baseTrunkRadius * 0.5, baseTrunkRadius * 0.5, baseTrunkHeight, 8);
-            const leavesGeo = new THREE.ConeGeometry(baseLeavesRadius, baseLeavesHeight, 8);
-            instancedTrunks = new THREE.InstancedMesh(trunkGeo, treeTrunkMat, TREE_COUNT);
-            instancedLeaves = new THREE.InstancedMesh(leavesGeo, treeLeavesMat, TREE_COUNT);
-            instancedTrunks.castShadow = true; instancedTrunks.receiveShadow = true;
-            instancedLeaves.castShadow = true; instancedLeaves.receiveShadow = true;
-            const dummy = new THREE.Object3D();
-            let placedTrees = 0;
-            const maxAttempts = TREE_COUNT * 5;
-            let attempts = 0;
-            while (placedTrees < TREE_COUNT && attempts < maxAttempts) {
-                attempts++;
-                const posX = (Math.random() - 0.5) * terrainArea;
-                const posZ = (Math.random() - 0.5) * terrainArea;
-                if (isInsideRunway(posX, posZ)) continue;
-                let tooCloseToMountain = false;
-                for (const mountain of mountains) {
-                    const dx = posX - mountain.x;
-                    const dz = posZ - mountain.z;
-                    if (dx * dx + dz * dz < mountain.radius * mountain.radius * 1.1) {
-                        tooCloseToMountain = true;
-                        break;
-                    }
-                }
-                if (tooCloseToMountain) continue;
-                const scaleVariation = Math.random() * 0.4 + 0.8;
-                dummy.position.set(posX, baseTrunkHeight * scaleVariation / 2, posZ);
-                dummy.scale.set(scaleVariation, scaleVariation, scaleVariation);
-                dummy.rotation.y = Math.random() * Math.PI * 2;
-                dummy.updateMatrix();
-                instancedTrunks.setMatrixAt(placedTrees, dummy.matrix);
-                dummy.position.set(posX, (baseTrunkHeight + baseLeavesHeight / 2 - 2) * scaleVariation, posZ);
-                dummy.updateMatrix();
-                instancedLeaves.setMatrixAt(placedTrees, dummy.matrix);
-                placedTrees++;
-            }
-            instancedTrunks.instanceMatrix.needsUpdate = true;
-            instancedLeaves.instanceMatrix.needsUpdate = true;
-            scene.add(instancedTrunks);
-            scene.add(instancedLeaves);
-            console.log(`Placed ${placedTrees} trees after ${attempts} attempts.`);
-            console.log("Environment created.");
-        }
-
-        function createHeartRings(count) { /* ... (No changes) ... */
-             const t=2.5,e=1.5,a=.5,o=new THREE.Shape;o.moveTo(5,5),o.bezierCurveTo(5,5,4,0,0,0),o.bezierCurveTo(-6,0,-6,7,-6,7),o.bezierCurveTo(-6,11,-3,15.4,5,19),o.bezierCurveTo(12,15.4,16,11,16,7),o.bezierCurveTo(16,7,16,0,10,0),o.bezierCurveTo(7,0,5,5,5,5);const n=.7,r=new THREE.Path;r.moveTo(5*n,2+5*n),r.bezierCurveTo(5*n,2+5*n,4*n,2,0,2),r.bezierCurveTo(-6*n,2,-6*n,2+7*n,-6*n,2+7*n),r.bezierCurveTo(-6*n,2+11*n,-3*n,2+15.4*n,5*n,2+19*n),r.bezierCurveTo(12*n,2+15.4*n,16*n,2+11*n,16*n,2+7*n),r.bezierCurveTo(16*n,2+7*n,16*n,2,10*n,2),r.bezierCurveTo(7*n,2,5*n,2+5*n,5*n,2+5*n),o.holes.push(r);const s={steps:1,depth:e,bevelEnabled:!0,bevelThickness:a,bevelSize:a,bevelOffset:0,bevelSegments:3},c=new THREE.ExtrudeGeometry(o,s);c.center(),c.scale(t,t,t);const h=new THREE.MeshStandardMaterial({color:16711935,emissive:13369548,roughness:.4,metalness:.1,side:THREE.DoubleSide});for(let i=0;i<count;i++){const l=new THREE.Mesh(c.clone(),h.clone()),d=2e3*Math.random()+600,g=2*Math.random()*Math.PI,p=600*Math.random()+150;l.position.set(Math.cos(g)*d,p,Math.sin(g)*d),l.rotation.set(Math.random()*Math.PI,Math.random()*Math.PI,Math.random()*Math.PI),l.userData={type:"ring",collected:!1},l.castShadow=!0,rings.push(l),scene.add(l)}console.log("Heart rings created.")
-         }
-
-        function createClouds(count) { /* ... (No changes) ... */
-             const cloudTextureUrl = 'https://threejs.org/examples/textures/sprites/disc.png'; const cloudTexture = new THREE.TextureLoader().load( cloudTextureUrl, undefined, undefined, (err) => { console.error('Error loading cloud texture:', cloudTextureUrl, err); } ); const cloudMaterial = new THREE.SpriteMaterial({ map: cloudTexture, color: 0xffffff, transparent: true, opacity: 0.35, blending: THREE.NormalBlending, sizeAttenuation: true }); for (let i = 0; i < count; i++) { const cloudSprite = new THREE.Sprite(cloudMaterial.clone()); const scale = Math.random() * 400 + 200; cloudSprite.scale.set(scale, scale, 1); cloudSprite.position.set( (Math.random() - 0.5) * 5800, Math.random() * 1000 + 300, (Math.random() - 0.5) * 5800 ); cloudSprite.userData = { type: 'cloud' }; clouds.push(cloudSprite); scene.add(cloudSprite); } console.log("Clouds created using disc texture.");
-        }
-
-        // --- Enemy Indicator --- (No changes)
-        function createEnemyIndicators() { console.log("Creating enemy indicators..."); for (let i = 0; i < MAX_INDICATORS; i++) { const indicator = document.createElement('div'); indicator.className = 'enemy-indicator'; indicatorsContainer.appendChild(indicator); enemyIndicators.push(indicator); } }
-        function updateEnemyIndicators() { if (!gameActive || !playerPlane) return; const screenWidth = window.innerWidth, screenHeight = window.innerHeight, screenCenterX = screenWidth / 2, screenCenterY = screenHeight / 2, screenMargin = 30; let visibleIndicatorCount = 0; enemyIndicators.forEach(ind => ind.style.display = 'none'); for (let i = 0; i < enemies.length; i++) { if (visibleIndicatorCount >= MAX_INDICATORS) break; const enemy = enemies[i]; if (!enemy || !enemy.parent) continue; const enemyPosWorld = enemy.position.clone(), enemyPosScreen = enemyPosWorld.project(camera); const camDirection = new THREE.Vector3(); camera.getWorldDirection(camDirection); const enemyDirection = enemyPosWorld.clone().sub(camera.position); const dot = camDirection.dot(enemyDirection); if (dot < 0) { const projectedPos = enemyPosWorld.clone().project(camera); projectedPos.x *= -1, projectedPos.y *= -1, projectedPos.z = 1; const angle = Math.atan2(projectedPos.y, projectedPos.x), screenX = screenCenterX + .95 * screenCenterX * Math.cos(angle), screenY = screenCenterY - .95 * screenCenterY * Math.sin(angle); const indicator = enemyIndicators[visibleIndicatorCount++]; indicator && (indicator.style.left = `${Math.max(screenMargin,Math.min(screenWidth-screenMargin,screenX))}px`, indicator.style.top = `${Math.max(screenMargin,Math.min(screenHeight-screenMargin,screenY))}px`, indicator.style.transform = `translateX(-50%) translateY(-100%) rotate(${-angle*180/Math.PI-90}deg)`, indicator.style.display = "block") } else if (Math.abs(enemyPosScreen.x) > 1 || Math.abs(enemyPosScreen.y) > 1) { const angle = Math.atan2(enemyPosScreen.y, enemyPosScreen.x), clampedX = Math.max(-1, Math.min(1, enemyPosScreen.x)), clampedY = Math.max(-1, Math.min(1, enemyPosScreen.y)); let screenX, screenY; const aspectRatio = screenWidth / screenHeight; Math.abs(clampedX / aspectRatio) > Math.abs(clampedY) ? (screenX = clampedX > 0 ? screenWidth - screenMargin : screenMargin, screenY = screenCenterY - screenHeight / 2 * Math.tan(angle) * clampedX) : (screenY = clampedY > 0 ? screenMargin : screenHeight - screenMargin, screenX = screenCenterX + screenWidth / 2 * (1 / Math.tan(angle)) * clampedY * aspectRatio), screenY = screenCenterY - screenCenterY * clampedY, screenX = Math.max(screenMargin, Math.min(screenWidth - screenMargin, screenX)), screenY = Math.max(screenMargin, Math.min(screenHeight - screenMargin, screenY)); const indicator = enemyIndicators[visibleIndicatorCount++]; indicator && (indicator.style.left = `${screenX}px`, indicator.style.top = `${screenY}px`, indicator.style.transform = `translateX(-50%) translateY(-100%) rotate(${-angle*180/Math.PI-90}deg)`, indicator.style.display = "block") } } }
-
-
-        // --- UI and State Functions --- (No changes)
-        function toggleLandingGear() {
-            // Gear toggle is handled within the state's input processing now
-            if (player.currentState instanceof LandedState) {
-                showMessage("Cannot retract gear while landed!");
-            } else {
-                player.gearDown = !player.gearDown;
-                landingGearGroup.visible = player.gearDown;
-            }
-        }
-        function showMessage(text, duration = 2000) { messageBoxElement.textContent = text; messageBoxElement.style.display = 'block'; if (duration > 0) { setTimeout(() => { if (messageBoxElement.textContent === text) { messageBoxElement.style.display = 'none'; } }, duration); } }
-        function updateHealthDisplay() { const healthPercentage = Math.max(0, player.health) / player.maxHealth * 100; healthBarElement.style.width = `${healthPercentage}%`; if (healthPercentage > 60) healthBarElement.style.backgroundColor = '#00ff00'; else if (healthPercentage > 30) healthBarElement.style.backgroundColor = '#ffff00'; else healthBarElement.style.backgroundColor = '#ff0000'; healthTextElement.textContent = `HP: ${Math.max(0, player.health)}/${player.maxHealth}`; }
-        function takeDamage(amount) { if (!gameActive) return; player.health -= amount; updateHealthDisplay(); triggerDamageFlash(); if (player.health <= 0) { gameOver(); } }
-        function triggerDamageFlash() { damageFlashElement.style.display = 'block'; setTimeout(() => { damageFlashElement.style.display = 'none'; }, 100); }
-        function gameOver() { console.log("Game Over!"); gameActive = false; showMessage("GAME OVER\nPress R to Reset", 0); if(playerPlane) playerPlane.visible = false; }
-        function resetGame() { console.log("Resetting game..."); if (animationFrameId) cancelAnimationFrame(animationFrameId); animationFrameId = null; init(); }
-        function updateEnemyCountDisplay() { if (enemyCountElement) enemyCountElement.textContent = `Enemies: ${enemies.length}`; } // Added function
-
-
-        // --- Firing Functions --- (No changes)
-         function fireProjectile() { const now = clock.getElapsedTime(); if (player.currentState instanceof LandedState || now - player.lastFireTime < PLAYER_FIRE_COOLDOWN) return; player.lastFireTime = now; const projectileMat = new THREE.MeshBasicMaterial({ color: 0xffff00 }); const projectileGeo = new THREE.SphereGeometry(0.6, 8, 8); const projectile = new THREE.Mesh(projectileGeo, projectileMat); const planePosition = playerPlane.position.clone(); const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(playerPlane.quaternion); projectile.position.copy(planePosition).add(forward.clone().multiplyScalar(6)); const projectileVelocity = forward.multiplyScalar(PLAYER_PROJECTILE_SPEED).add(player.velocity); projectile.userData = { type: 'projectile', owner: 'player', velocity: projectileVelocity, spawnTime: now }; projectiles.push(projectile); scene.add(projectile); }
-         function enemyFireProjectile(enemy) { const now = clock.getElapsedTime(); if (now - enemy.userData.lastFireTime < enemy.userData.fireCooldown) return; enemy.userData.lastFireTime = now; const projectileMat = new THREE.MeshBasicMaterial({ color: 0xff6600 }); const projectileGeo = new THREE.SphereGeometry(0.5, 8, 8); const projectile = new THREE.Mesh(projectileGeo, projectileMat); const enemyPosition = enemy.position.clone(); const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(enemy.quaternion); projectile.position.copy(enemyPosition).add(forward.clone().multiplyScalar(6)); const projectileVelocity = forward.multiplyScalar(ENEMY_PROJECTILE_SPEED); projectile.userData = { type: 'projectile', owner: 'enemy', velocity: projectileVelocity, spawnTime: now }; projectiles.push(projectile); scene.add(projectile); }
-
-        // --- Input Handling --- (No changes)
-        function handleInput(deltaTime) {
-            inputState.pitch = 0; inputState.roll = 0; inputState.yaw = 0; inputState.throttle = 0; inputState.fire = false; inputState.gear = false; inputState.reset = false; inputState.trimAdjust = 0;
-            const gamepads = navigator.getGamepads();
-            const gp = gamepads[0];
-            let gamepadActive = false;
-
-            if (gp && gp.connected) {
-                gamepadActive = true;
-                const leftStickX = gp.axes[0];
-                const leftStickY = gp.axes[1];
-                const rightStickX = gp.axes[2];
-                const rightTrigger = gp.buttons[7]?.value || 0;
-                const leftTrigger = gp.buttons[6]?.value || 0;
-                const leftBumper = gp.buttons[4]?.pressed; // LB
-                const rightBumper = gp.buttons[5]?.pressed; // RB
-
-                if (Math.abs(leftStickX) > GAMEPAD_DEADZONE) inputState.roll = leftStickX;
-                if (Math.abs(leftStickY) > GAMEPAD_DEADZONE) inputState.pitch = -leftStickY;
-                if (Math.abs(rightStickX) > GAMEPAD_DEADZONE) inputState.yaw = -rightStickX;
-                inputState.throttle = rightTrigger - leftTrigger;
-                if (gp.buttons[0]?.pressed) inputState.fire = true; // A/X button
-
-                const gearButton = gp.buttons[3]?.pressed; // Y/Triangle button
-                if (gearButton && !gearPressedLastFrame) inputState.gear = true;
-                gearPressedLastFrame = gearButton;
-
-                if (rightBumper) inputState.trimAdjust = 1; // Trim Up (Nose Down) - RB
-                if (leftBumper) inputState.trimAdjust = -1; // Trim Down (Nose Up) - LB
-
-                if (!gameActive && (gp.buttons[9]?.pressed || gp.buttons[8]?.pressed)) inputState.reset = true; // Start/Select
-            } else {
-                gearPressedLastFrame = false;
-            }
-
-            // Keyboard Overrides/Inputs
-            if (keys['w']) inputState.pitch = 1;
-            if (keys['s']) inputState.pitch = -1;
-            if (keys['a']) inputState.roll = -1;
-            if (keys['d']) inputState.roll = 1;
-            if (keys['q']) inputState.yaw = 1;
-            if (keys['e']) inputState.yaw = -1;
-            if (keys['shift']) inputState.throttle = 1;
-            if (keys['control']) inputState.throttle = -1;
-            if (keys['arrowup']) inputState.trimAdjust = 1; // Trim Up (Nose Down)
-            if (keys['arrowdown']) inputState.trimAdjust = -1; // Trim Down (Nose Up)
-            if (keys[' ']) inputState.fire = true;
-            if (keys['g']) { keys['g'] = false; inputState.gear = true; } // Toggle Gear
-            if (keys['p']) { keys['p'] = false; inputState.autopilotToggle = true; } // Toggle Autopilot
-            if (!gameActive && keys['r']) inputState.reset = true;
-
-            // Update Controller Status Display
-            const currentStatusText = gamepad ? `Controller: ${gamepad.id}` : "No Controller Detected";
-            if (controllerStatusElement.textContent !== currentStatusText) {
-                controllerStatusElement.textContent = currentStatusText;
-            }
-        }
-
-
-        // --- Aerodynamic Helper Functions --- (Moved outside classes for shared access)
-        function calculateLiftCoefficient(angleOfAttack, isStalled) {
-            if (isStalled) {
-                // Reduced and somewhat unstable lift when stalled.
-                // The lift coefficient drops significantly and might fluctuate.
-                return 0.3 + Math.sin(angleOfAttack * 2) * 0.1;
-            }
-            // Simple linear approximation of the lift curve slope up to the stall angle.
-            // Cl = Cl_slope * angleOfAttack + Cl_zero_lift
-            // This is a simplification; real lift curves are non-linear.
-            const Cl_max = 1.4; // Maximum lift coefficient before stall
-            const stallAngle = MAX_ANGLE_OF_ATTACK;
-            const zeroLiftAoA = -0.05; // Small negative AoA for zero lift (typical for cambered airfoils)
-            const Cl_slope = Cl_max / (stallAngle - zeroLiftAoA);
-
-            if (angleOfAttack <= stallAngle && angleOfAttack >= zeroLiftAoA - 0.1) { // Allow slightly negative AoA
-                 // Linear region of lift curve
-                return Cl_slope * (angleOfAttack - zeroLiftAoA);
-            } else if (angleOfAttack > stallAngle) {
-                // Past stall angle (should ideally be handled by isStalled state, but as fallback)
-                // Rapid drop in lift after stall.
-                return 0.4 - (angleOfAttack - stallAngle) * 2.0; // Example drop-off
-            } else {
-                 // Very negative AoA (inverted flight region, simplified)
-                 return Cl_slope * (angleOfAttack - zeroLiftAoA) * 0.8; // Reduced lift when inverted/very negative AoA
-            }
-        }
-
-        function calculateDragCoefficient(angleOfAttack, isStalled, speed) {
-            // Drag = Parasitic Drag + Induced Drag
-            // Cd = Cd_parasitic + Cd_induced
-
-            // 1. Parasitic Drag (Cd_p): Friction and form drag, increases with speed^2 (implicitly handled by drag formula)
-            //    We can add a component that slightly increases with AoA due to form changes.
-            const Cd_base = 0.04; // Base parasitic drag (fuselage, wings at zero lift)
-            let formDragAoA = Math.abs(angleOfAttack) * 0.3; // Drag increase due to non-optimal AoA presentation
-
-            // 2. Induced Drag (Cd_i): Drag generated as a byproduct of lift.
-            //    Cd_i = Cl^2 / (pi * e * AR), where e is Oswald efficiency, AR is aspect ratio.
-            //    We simplify this using the calculated lift coefficient (Cl).
-            const Cd_induced_factor = 0.05; // Simplified factor representing 1 / (pi * e * AR)
-            const Cl = calculateLiftCoefficient(angleOfAttack, isStalled);
-            const inducedDrag = Cl * Cl * Cd_induced_factor;
-
-            if (isStalled) {
-                // When stalled, flow separation drastically increases form drag.
-                formDragAoA *= 4.0; // Significantly higher form drag when stalled
-            }
-
-            return Cd_base + formDragAoA + inducedDrag;
-        }
-
-        // --- Flight State Interface (Conceptual) ---
-        // All flight states should have an `update` method:
-        // update(player, inputState, deltaTime) -> returns the next state object
-
-        // --- Landed State ---
-        class LandedState {
-            update(player, inputState, deltaTime) {
-                // --- Input Processing ---
-                // Update throttle level based on input
-                const throttleAdjustmentRate = 0.6;
-                player.throttleLevel += inputState.throttle * throttleAdjustmentRate * deltaTime;
-                player.throttleLevel = Math.max(0, Math.min(1, player.throttleLevel));
-
-                // Update trim (can be adjusted on ground)
-                const trimAdjustmentRate = 0.5;
-                player.elevatorTrim += inputState.trimAdjust * trimAdjustmentRate * deltaTime;
-                player.elevatorTrim = Math.max(-1, Math.min(1, player.elevatorTrim));
-
-                // Handle gear toggle attempt (ignored on ground)
-                if (inputState.gear) {
-                    showMessage("Cannot retract gear while landed!", 1500);
-                }
-                // Handle firing attempt (ignored on ground)
-                if (inputState.fire) {
-                    // Optional: Add message "Cannot fire while landed"
-                }
-
-                // --- Physics ---
-                const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(playerPlane.quaternion);
-                const netForce = new THREE.Vector3(0, 0, 0);
-
-                // 1. Thrust (for taxiing/takeoff)
-                // Apply thrust based on throttle level, potentially reduced on ground.
-                const thrustMagnitude = player.throttleLevel * MAX_THRUST;
-                const taxiThrust = forward.clone().multiplyScalar(thrustMagnitude * 0.8); // Slightly reduced thrust effectiveness on ground
-                netForce.add(taxiThrust);
-
-                // 2. Friction
-                // Apply friction opposing the current velocity.
-                const speed = player.velocity.length();
-                // Reduced friction coefficient
-                const frictionCoefficient = speed < 1 ? 40.0 : 8.0; // Higher friction when very slow/stopping
-                const frictionForce = player.velocity.clone().multiplyScalar(-frictionCoefficient);
-                netForce.add(frictionForce);
-
-                // 3. Gravity (is counteracted by ground force, so net vertical force is zero unless taking off)
-                // We don't explicitly add gravity and ground reaction; instead, we clamp position and vertical velocity.
-
-                // --- Update Velocity & Position ---
-                const acceleration = netForce.divideScalar(player.mass);
-                player.velocity.add(acceleration.multiplyScalar(deltaTime));
-
-                // Clamp vertical velocity and position
-                player.velocity.y = 0;
-                playerPlane.position.y = GROUND_LEVEL + LANDING_GEAR_HEIGHT / 2;
-
-                // Come to a full stop if slow and no throttle
-                if (player.velocity.lengthSq() < 0.1 && player.throttleLevel < 0.05) {
-                    player.velocity.set(0, 0, 0);
-                }
-
-                // Apply position change based on velocity
-                playerPlane.position.add(player.velocity.clone().multiplyScalar(deltaTime));
-
-                // --- Rotation ---
-                // Allow yaw control for steering on the ground
-                const targetYawSpeed = inputState.yaw * player.yawSpeed * 0.7; // Reduced yaw authority on ground
-                const lerpFactor = 10 * deltaTime;
-                player.rotationSpeed.yaw = THREE.MathUtils.lerp(player.rotationSpeed.yaw, targetYawSpeed, lerpFactor);
-                playerPlane.rotateY(player.rotationSpeed.yaw * deltaTime);
-
-                // Allow Pitch control for takeoff rotation (clamped)
-                const targetPitchSpeed = inputState.pitch * player.pitchSpeed * 0.5; // Reduced authority on ground
-                player.rotationSpeed.pitch = THREE.MathUtils.lerp(player.rotationSpeed.pitch, targetPitchSpeed, lerpFactor);
-                playerPlane.rotateX(player.rotationSpeed.pitch * deltaTime);
-                // Clamp pitch rotation on ground to allow takeoff rotation but prevent excessive pitch
-                const maxGroundPitch = 0.15; // Radians (approx 8.6 degrees) - Nose Up
-                const minGroundPitch = -0.05; // Radians (approx -2.9 degrees) - Slight Nose Down allowed
-                playerPlane.rotation.x = Math.max(minGroundPitch, Math.min(playerPlane.rotation.x, maxGroundPitch));
-
-                // Prevent Roll
-                player.rotationSpeed.roll = 0;
-                playerPlane.rotation.z = 0;
-
-                // --- State Transition Check: Takeoff ---
-                const forwardSpeed = player.velocity.dot(forward); // Speed along the plane's forward axis
-                if (forwardSpeed > TAKEOFF_SPEED && player.throttleLevel > 0.75) {
-                    // Check if lift is potentially sufficient (simplified check for takeoff)
-                    // Use pitch angle as a proxy for AoA during takeoff run
-                    const approxAoA = -playerPlane.rotation.x; // Pitch angle (usually 0 on ground, but player might try to pitch up)
-                    const approxCl = calculateLiftCoefficient(approxAoA, false); // Assume not stalled for takeoff check
-                    const approxLift = 0.5 * AIR_DENSITY * forwardSpeed * forwardSpeed * WING_AREA * approxCl;
-
-                    // Need lift greater than weight to take off
-                    if (approxLift > player.mass * GRAVITY * 1.05) { // Require slightly more lift than weight
-                        console.log("Transitioning to NormalFlightState (Takeoff)");
-                        showMessage("Airborne!", 1500);
-                        // Give a small initial upward velocity boost
-                        player.velocity.y += 3;
-                        stallWarningElement.style.display = 'none';
-                        return new NormalFlightState(); // Transition to normal flight
-                    }
-                }
-
-                // Remain in LandedState
-                stallWarningElement.style.display = 'none';
-                return this;
-            }
-        }
-
-        // --- Normal Flight State ---
-        class NormalFlightState {
-            update(player, inputState, deltaTime) {
-                // --- Input Processing ---
-                const throttleAdjustmentRate = 0.6;
-                player.throttleLevel += inputState.throttle * throttleAdjustmentRate * deltaTime;
-                player.throttleLevel = Math.max(0, Math.min(1, player.throttleLevel));
-
-                const trimAdjustmentRate = 0.5;
-                player.elevatorTrim += inputState.trimAdjust * trimAdjustmentRate * deltaTime;
-                player.elevatorTrim = Math.max(-1, Math.min(1, player.elevatorTrim));
-
-                if (inputState.gear) toggleLandingGear(); // Allow gear toggle in air
-                if (inputState.fire) fireProjectile();
-
-                // --- Calculate Orientation Vectors ---
-                const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(playerPlane.quaternion);
-                const up = new THREE.Vector3(0, 1, 0).applyQuaternion(playerPlane.quaternion);
-                const right = new THREE.Vector3(1, 0, 0).applyQuaternion(playerPlane.quaternion);
-
-                // --- Calculate Aerodynamic Angles ---
-                const speedSq = player.velocity.lengthSq();
-                let angleOfAttack = 0;
-                let sideslipAngle = 0; // Placeholder for future implementation
-
-                if (speedSq > 0.1) {
-                    const relativeWind = player.velocity.clone().normalize(); // Wind direction relative to world
-
-                    // Angle of Attack (AoA): Angle between chord line (plane's forward) and relative wind, projected onto the plane's vertical plane.
-                    // Project relative wind onto the plane's XZ plane (forward/right)
-                    const windForwardComponent = relativeWind.dot(forward);
-                    // Project relative wind onto the plane's Y axis (up)
-                    const windUpComponent = relativeWind.dot(up);
-                    // AoA is the angle whose tangent is (vertical wind component / forward wind component)
-                    angleOfAttack = Math.atan2(-windUpComponent, windForwardComponent); // Negative up component means positive AoA
-
-                    // Sideslip Angle (Beta): Angle between relative wind and plane's XZ plane.
-                    // Project relative wind onto the plane's X axis (right)
-                    // const windRightComponent = relativeWind.dot(right);
-                    // sideslipAngle = Math.atan2(windRightComponent, windForwardComponent); // Simplified
-                }
-
-                // --- Stall Check ---
-                if (angleOfAttack > MAX_ANGLE_OF_ATTACK) {
-                    console.log("Transitioning to StalledFlightState");
-                    stallWarningElement.style.display = 'block';
-                    return new StalledFlightState(); // Transition to stalled state
-                }
-
-                // --- Calculate Forces ---
-                const netForce = new THREE.Vector3(0, 0, 0);
-
-                // 1. Gravity
-                const gravityForce = new THREE.Vector3(0, -GRAVITY * player.mass, 0);
-                netForce.add(gravityForce);
-
-                // 2. Thrust
-                const thrustMagnitude = player.throttleLevel * MAX_THRUST;
-                const thrustForce = forward.clone().multiplyScalar(thrustMagnitude);
-                netForce.add(thrustForce);
-
-                // 3. Aerodynamic Forces (Lift and Drag)
-                let liftForce = 0;
-                if (speedSq > 0.1) {
-                    const speed = Math.sqrt(speedSq);
-                    const Cl = calculateLiftCoefficient(angleOfAttack, false); // Not stalled in this state
-                    const Cd = calculateDragCoefficient(angleOfAttack, false, speed);
-
-                    // Dynamic Pressure (q) = 0.5 * rho * V^2
-                    const dynamicPressure = 0.5 * AIR_DENSITY * speedSq;
-
-                    // Lift Force = q * S * Cl
-                    const liftMagnitude = dynamicPressure * WING_AREA * Cl;
-                    // Lift acts perpendicular to the relative wind vector, in the plane's symmetry plane (or close to it).
-                    // liftDirection = normalize(cross(relativeWind, planeRight))
-                    const liftDirection = new THREE.Vector3().crossVectors(player.velocity, right).normalize();
-                     // Ensure lift is generally upwards relative to the plane's orientation
-                     if (liftDirection.dot(up) < 0) {
-                         liftDirection.negate();
-                     }
-                    liftForce = liftDirection.multiplyScalar(liftMagnitude);
-                    netForce.add(liftForce);
-
-                    // Drag Force = q * S * Cd
-                    const dragMagnitude = dynamicPressure * WING_AREA * Cd;
-                    // Drag acts opposite to the velocity vector.
-                    const dragForce = player.velocity.clone().normalize().multiplyScalar(-dragMagnitude);
-                    netForce.add(dragForce);
-                }
-
-                // --- Calculate Moments and Angular Acceleration ---
-                let totalPitchMoment = 0;
-
-                // 1. Control Surface Moment (Elevator + Trim)
-                const trimPitchInfluence = player.elevatorTrim * player.pitchSpeed * TRIM_AUTHORITY;
-                const controlInputPitch = inputState.pitch * player.pitchSpeed; // Raw pitch input effect
-                // Moment = ControlAuthority * (CombinedInputSignal)
-                const controlSurfaceMoment = PITCH_CONTROL_AUTHORITY * (controlInputPitch + trimPitchInfluence);
-                totalPitchMoment += controlSurfaceMoment;
-
-                // 2. Aerodynamic Pitching Moment (Stability)
-                // Lift acts at the Center of Pressure (CP), which might be offset from the Center of Gravity (CG).
-                // Moment = LiftForce * distance(CP - CG)
-                // We use a simplified model where lift acts vertically relative to the plane, at an offset.
-                if (speedSq > 0.1) {
-                    const liftMagnitude = liftForce.dot(up); // Approximate lift component along plane's up axis
-                    // Moment = Force * Lever Arm (COL_OFFSET_Z is the lever arm)
-                    const aeroPitchMoment = liftMagnitude * COL_OFFSET_Z;
-                    totalPitchMoment += aeroPitchMoment;
-
-                    // 2b. Tail Stability Moment (Inherent stability from tail AoA)
-                    // This moment counteracts changes in AoA. Positive AoA -> Nose Down Moment.
-                    // Needs dynamic pressure, which was calculated earlier for lift/drag.
-                    const dynamicPressure = 0.5 * AIR_DENSITY * speedSq; // Recalculate or reuse from lift/drag section
-                    const tailStabilityMoment = -TAIL_STABILITY_FACTOR * angleOfAttack * dynamicPressure; // Scaled by DP and AoA. Negative sign for stability.
-                    totalPitchMoment += tailStabilityMoment;
-                }
-
-                // 3. Damping Moment
-                // Opposes the current pitch rotation speed. Moment = -DampingFactor * AngularVelocity
-                const pitchDampingMoment = -PITCH_DAMPING * player.rotationSpeed.pitch;
-                totalPitchMoment += pitchDampingMoment;
-
-
-                // --- Update Angular Velocities ---
-                // Pitch: alpha = Torque / Inertia
-                const pitchAngularAccel = totalPitchMoment / player.momentOfInertiaPitch;
-                player.rotationSpeed.pitch += pitchAngularAccel * deltaTime;
-
-                // Roll & Yaw (Simpler lerp towards target for now)
-                const targetRollSpeed = inputState.roll * player.rollSpeed;
-                const targetYawSpeed = inputState.yaw * player.yawSpeed;
-                const lerpFactor = 10 * deltaTime;
-                player.rotationSpeed.roll = THREE.MathUtils.lerp(player.rotationSpeed.roll, targetRollSpeed, lerpFactor);
-                player.rotationSpeed.yaw = THREE.MathUtils.lerp(player.rotationSpeed.yaw, targetYawSpeed, lerpFactor);
-
-                // --- Apply Roll-Induced Yaw/Turn ---
-                 if (Math.abs(playerPlane.rotation.z) > 0.01) { // If rolling
-                     const rollAngle = playerPlane.rotation.z;
-                     const pitchAngle = playerPlane.rotation.x;
-                     // When banked, the horizontal component of lift causes a turn.
-                     // Turn Rate approx proportional to sin(roll) * lift / (mass * speed)
-                     // Simplified: Proportional to sin(roll) * speed
-                     const turnMagnitude = -Math.sin(rollAngle) * Math.cos(pitchAngle) * ROLL_INDUCED_TURN_FACTOR * player.speed * deltaTime;
-                     if (Math.abs(turnMagnitude) > 0.0001) {
-                         const worldUp = new THREE.Vector3(0, 1, 0);
-                         // Rotate velocity vector around world up axis
-                         const turnRotation = new THREE.Quaternion().setFromAxisAngle(worldUp, turnMagnitude * 0.05); // Factor adjusts sensitivity
-                         player.velocity.applyQuaternion(turnRotation);
-                         // Also rotate the plane model itself around world up
-                         playerPlane.rotateOnWorldAxis(worldUp, turnMagnitude * 0.05);
-                     }
-                 }
-                 // Auto-level roll slightly when no input
-                 if (inputState.roll === 0) {
-                     player.rotationSpeed.roll *= (1 - 0.9 * deltaTime); // Dampen roll speed
-                     playerPlane.rotation.z *= (1 - 1.5 * deltaTime); // Nudge rotation back to zero
-                 }
-
-
-                // --- Update Linear Velocity & Position ---
-                const acceleration = netForce.divideScalar(player.mass);
-                player.velocity.add(acceleration.multiplyScalar(deltaTime));
-                playerPlane.position.add(player.velocity.clone().multiplyScalar(deltaTime));
-
-                // --- Update Rotation ---
-                playerPlane.rotateZ(player.rotationSpeed.roll * deltaTime);
-                playerPlane.rotateX(player.rotationSpeed.pitch * deltaTime);
-                playerPlane.rotateY(player.rotationSpeed.yaw * deltaTime);
-
-                // --- State Transition Check: Landing ---
-                const altitude = playerPlane.position.y - GROUND_LEVEL;
-                const verticalSpeed = player.velocity.y;
-                // Check conditions for landing
-                if (player.gearDown && altitude < LANDING_GEAR_HEIGHT + 1 && Math.abs(verticalSpeed) < MAX_VERTICAL_LANDING_SPEED && Math.abs(playerPlane.rotation.x) < 0.15 && Math.abs(playerPlane.rotation.z) < 0.15) {
-                    console.log("Transitioning to LandedState");
-                    showMessage("Landed!", 1500);
-                    playerPlane.position.y = GROUND_LEVEL + LANDING_GEAR_HEIGHT / 2; // Snap to ground
-                    player.velocity.y = 0; // Stop vertical movement
-                    player.velocity.multiplyScalar(0.8); // Reduce speed on touchdown
-                    player.rotationSpeed.pitch = 0; player.rotationSpeed.roll = 0; // Stop rotation
-                    playerPlane.rotation.x = 0; playerPlane.rotation.z = 0; // Level out
-                    stallWarningElement.style.display = 'none';
-                    return new LandedState(); // Transition to landed state
-                }
-
-                // --- State Transition Check: Crashing ---
-                if (altitude < 0) { // Hit the ground without meeting landing criteria
-                     console.log("Crash into ground!");
-                     takeDamage(COLLISION_DAMAGE * 3); // More damage for ground impact
-                     playerPlane.position.y = GROUND_LEVEL; // Stick to ground
-                     player.velocity.set(0,0,0); // Stop movement
-                     // Optionally transition to a "Crashed" state or just end game via takeDamage
-                     // For now, stay in NormalFlightState but damaged/stopped
-                     stallWarningElement.style.display = 'none';
-                     // If health is <= 0, gameOver() will be called by takeDamage
-                     // If not game over, maybe transition to LandedState?
-                     if (player.health > 0) {
-                         return new LandedState(); // Treat crash as a very hard landing
-                     } else {
-                         return this; // Stay in this state until game over logic takes over
-                     }
-                }
-
-                // Remain in NormalFlightState
-                stallWarningElement.style.display = 'none';
-                return this;
-            }
-        }
-
-        // --- Stalled Flight State ---
-        class StalledFlightState {
-            update(player, inputState, deltaTime) {
-                // --- Input Processing (Same as Normal, but effectiveness reduced later) ---
-                const throttleAdjustmentRate = 0.6;
-                player.throttleLevel += inputState.throttle * throttleAdjustmentRate * deltaTime;
-                player.throttleLevel = Math.max(0, Math.min(1, player.throttleLevel));
-
-                const trimAdjustmentRate = 0.5;
-                player.elevatorTrim += inputState.trimAdjust * trimAdjustmentRate * deltaTime;
-                player.elevatorTrim = Math.max(-1, Math.min(1, player.elevatorTrim));
-
-                if (inputState.gear) toggleLandingGear();
-                if (inputState.fire) fireProjectile(); // Allow firing while stalled? Maybe not.
-
-                // --- Calculate Orientation Vectors ---
-                const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(playerPlane.quaternion);
-                const up = new THREE.Vector3(0, 1, 0).applyQuaternion(playerPlane.quaternion);
-                const right = new THREE.Vector3(1, 0, 0).applyQuaternion(playerPlane.quaternion);
-
-                // --- Calculate Aerodynamic Angles (Same as Normal) ---
-                const speedSq = player.velocity.lengthSq();
-                let angleOfAttack = 0;
-                if (speedSq > 0.1) {
-                    const relativeWind = player.velocity.clone().normalize();
-                    const windForwardComponent = relativeWind.dot(forward);
-                    const windUpComponent = relativeWind.dot(up);
-                    angleOfAttack = Math.atan2(-windUpComponent, windForwardComponent);
-                }
-
-                // --- Stall Recovery Check ---
-                // If AoA drops below stall threshold, transition back to Normal flight
-                if (angleOfAttack < MAX_ANGLE_OF_ATTACK * 0.9) { // Use a hysteresis factor
-                    console.log("Transitioning back to NormalFlightState (Stall Recovery)");
-                    stallWarningElement.style.display = 'none';
-                    return new NormalFlightState();
-                }
-
-                // --- Calculate Forces (Stalled Aerodynamics) ---
-                const netForce = new THREE.Vector3(0, 0, 0);
-                const controlEffectiveness = 0.3; // Reduced control surface effectiveness
-
-                // 1. Gravity
-                const gravityForce = new THREE.Vector3(0, -GRAVITY * player.mass, 0);
-                netForce.add(gravityForce);
-
-                // 2. Thrust
-                const thrustMagnitude = player.throttleLevel * MAX_THRUST;
-                const thrustForce = forward.clone().multiplyScalar(thrustMagnitude);
-                netForce.add(thrustForce);
-
-                // 3. Aerodynamic Forces (Lift and Drag - Stalled)
-                if (speedSq > 0.1) {
-                    const speed = Math.sqrt(speedSq);
-                    // Use stalled coefficients
-                    const Cl = calculateLiftCoefficient(angleOfAttack, true); // Pass isStalled = true
-                    const Cd = calculateDragCoefficient(angleOfAttack, true, speed); // Pass isStalled = true
-
-                    const dynamicPressure = 0.5 * AIR_DENSITY * speedSq;
-
-                    // Lift (Reduced and potentially unstable)
-                    const liftMagnitude = dynamicPressure * WING_AREA * Cl;
-                    const liftDirection = new THREE.Vector3().crossVectors(player.velocity, right).normalize();
-                     if (liftDirection.dot(up) < 0) {
-                         liftDirection.negate();
-                     }
-                    const liftForce = liftDirection.multiplyScalar(liftMagnitude);
-                    netForce.add(liftForce);
-
-                    // Drag (Significantly Increased)
-                    const dragMagnitude = dynamicPressure * WING_AREA * Cd;
-                    const dragForce = player.velocity.clone().normalize().multiplyScalar(-dragMagnitude);
-                    netForce.add(dragForce);
-                }
-
-                // --- Calculate Moments and Angular Acceleration (Reduced Control) ---
-                let totalPitchMoment = 0;
-
-                // 1. Control Surface Moment (Reduced Effectiveness)
-                const trimPitchInfluence = player.elevatorTrim * player.pitchSpeed * TRIM_AUTHORITY; // Trim might still have some effect
-                const controlInputPitch = inputState.pitch * player.pitchSpeed;
-                // Apply effectiveness reduction to direct input, maybe less to trim?
-                const controlSurfaceMoment = PITCH_CONTROL_AUTHORITY * (controlInputPitch * controlEffectiveness + trimPitchInfluence * 0.8);
-                totalPitchMoment += controlSurfaceMoment;
-
-                // 2. Aerodynamic Pitching Moment (May become unstable or nose-down)
-                if (speedSq > 0.1) {
-                    const liftMagnitude = netForce.dot(up); // Use the actual (reduced) lift
-                    const aeroPitchMoment = liftMagnitude * COL_OFFSET_Z; // Stability moment based on reduced lift
-                    totalPitchMoment += aeroPitchMoment;
-
-                    // 2b. Tail Stability Moment (Still applies, though flow might be separated)
-                    const dynamicPressure = 0.5 * AIR_DENSITY * speedSq; // Recalculate or reuse
-                    // Reduce the effect slightly during stall? Or keep it for recovery? Keep for now.
-                    const tailStabilityMoment = -TAIL_STABILITY_FACTOR * angleOfAttack * (dynamicPressure / 1000);
-                    totalPitchMoment += tailStabilityMoment;
-
-                    // Add an explicit nose-down pitching moment during stall
-                    const stallPitchDownMoment = -2000; // Constant nose-down torque
-                    totalPitchMoment += stallPitchDownMoment;
-                }
-
-
-                // 3. Damping Moment (Might be less effective in separated flow)
-                const pitchDampingMoment = -PITCH_DAMPING * player.rotationSpeed.pitch * 0.7; // Reduced damping
-                totalPitchMoment += pitchDampingMoment;
-
-                // --- Update Angular Velocities ---
-                const pitchAngularAccel = totalPitchMoment / player.momentOfInertiaPitch;
-                player.rotationSpeed.pitch += pitchAngularAccel * deltaTime;
-
-                // Roll & Yaw (Reduced Effectiveness)
-                const targetRollSpeed = inputState.roll * player.rollSpeed * controlEffectiveness;
-                const targetYawSpeed = inputState.yaw * player.yawSpeed * controlEffectiveness;
-                const lerpFactor = 3 * deltaTime; // Slower response when stalled
-                player.rotationSpeed.roll = THREE.MathUtils.lerp(player.rotationSpeed.roll, targetRollSpeed, lerpFactor);
-                player.rotationSpeed.yaw = THREE.MathUtils.lerp(player.rotationSpeed.yaw, targetYawSpeed, lerpFactor);
-
-                // Reduce auto-leveling during stall
-                 if (inputState.roll === 0) {
-                     player.rotationSpeed.roll *= (1 - 0.2 * deltaTime);
-                     playerPlane.rotation.z *= (1 - 0.3 * deltaTime);
-                 }
-
-
-                // --- Update Linear Velocity & Position ---
-                const acceleration = netForce.divideScalar(player.mass);
-                player.velocity.add(acceleration.multiplyScalar(deltaTime));
-                playerPlane.position.add(player.velocity.clone().multiplyScalar(deltaTime));
-
-                // --- Update Rotation ---
-                playerPlane.rotateZ(player.rotationSpeed.roll * deltaTime);
-                playerPlane.rotateX(player.rotationSpeed.pitch * deltaTime);
-                playerPlane.rotateY(player.rotationSpeed.yaw * deltaTime);
-
-                // --- State Transition Check: Landing/Crashing (Same as Normal) ---
-                const altitude = playerPlane.position.y - GROUND_LEVEL;
-                const verticalSpeed = player.velocity.y;
-                if (player.gearDown && altitude < LANDING_GEAR_HEIGHT + 1 && Math.abs(verticalSpeed) < MAX_VERTICAL_LANDING_SPEED * 1.5 && Math.abs(playerPlane.rotation.x) < 0.3 && Math.abs(playerPlane.rotation.z) < 0.3) { // More lenient landing criteria from stall
-                    console.log("Transitioning to LandedState (from Stall)");
-                    showMessage("Landed Hard!", 1500);
-                    playerPlane.position.y = GROUND_LEVEL + LANDING_GEAR_HEIGHT / 2;
-                    player.velocity.y = 0;
-                    player.velocity.multiplyScalar(0.6); // Lose more speed
-                    player.rotationSpeed.pitch = 0; player.rotationSpeed.roll = 0;
-                    playerPlane.rotation.x = 0; playerPlane.rotation.z = 0;
-                    stallWarningElement.style.display = 'none';
-                    return new LandedState();
-                }
-                if (altitude < 0) {
-                     console.log("Crash into ground (from Stall)!");
-                     takeDamage(COLLISION_DAMAGE * 4); // Even more damage
-                     playerPlane.position.y = GROUND_LEVEL;
-                     player.velocity.set(0,0,0);
-                     stallWarningElement.style.display = 'none';
-                     if (player.health > 0) {
-                         return new LandedState();
-                     } else {
-                         return this;
-                     }
-                }
-
-                // Remain in StalledFlightState
-                stallWarningElement.style.display = 'block'; // Keep warning visible
-                return this;
-            }
-        }
-
-        // --- Autopilot Flight State ---
-        class AutopilotFlightState {
-            constructor() {
-                this.targetEnemy = null;
-                this.lastTargetCheckTime = 0;
-                this.targetCheckInterval = 1.0; // Check for a new target every second
-                console.log("Autopilot Engaged");
-                autopilotStatusElement.style.display = 'block';
-            }
-
-            findNearestEnemy() {
-                let nearestEnemy = null;
-                let minDistanceSq = Infinity;
-
-                enemies.forEach(enemy => {
-                    if (enemy && enemy.parent) { // Check if enemy exists and is in the scene
-                        const distanceSq = playerPlane.position.distanceToSquared(enemy.position);
-                        if (distanceSq < minDistanceSq) {
-                            minDistanceSq = distanceSq;
-                            nearestEnemy = enemy;
-                        }
-                    }
-                });
-                return nearestEnemy;
-            }
-
-            update(player, inputState, deltaTime) {
-                const now = clock.getElapsedTime();
-
-                // --- Target Selection ---
-                if (!this.targetEnemy || !this.targetEnemy.parent || now - this.lastTargetCheckTime > this.targetCheckInterval) {
-                    this.targetEnemy = this.findNearestEnemy();
-                    this.lastTargetCheckTime = now;
-                    if (!this.targetEnemy) {
-                        console.log("Autopilot: No enemies found, disengaging.");
-                        autopilotStatusElement.style.display = 'none';
-                        return player.previousState || new NormalFlightState(); // Revert to previous state or default
-                    } else {
-                        console.log("Autopilot: Targeting enemy at", this.targetEnemy.position);
-                    }
-                }
-
-                // --- Autopilot Control Logic ---
-                const apInput = { pitch: 0, roll: 0, yaw: 0, throttle: 0.8, fire: false }; // Autopilot generated inputs
-
-                const targetPosition = this.targetEnemy.position;
-                const playerPosition = playerPlane.position;
-                const directionToTarget = targetPosition.clone().sub(playerPosition).normalize();
-                const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(playerPlane.quaternion);
-                const up = new THREE.Vector3(0, 1, 0).applyQuaternion(playerPlane.quaternion);
-                const right = new THREE.Vector3(1, 0, 0).applyQuaternion(playerPlane.quaternion);
-
-                const angleToTarget = forward.angleTo(directionToTarget);
-                const distanceToTarget = playerPosition.distanceTo(targetPosition);
-
-                // --- Steering (Pitch, Roll, Yaw) ---
-                // Basic Proportional Control for Steering
-                const desiredQuaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), directionToTarget);
-                const currentQuaternion = playerPlane.quaternion.clone();
-                const deltaQuaternion = desiredQuaternion.clone().multiply(currentQuaternion.invert());
-
-                // Extract axis and angle from the delta quaternion
-                const axis = new THREE.Vector3();
-                const angle = 2 * Math.acos(deltaQuaternion.w);
-                if (angle > Math.PI) angle -= 2 * Math.PI; // Handle angles > 180 degrees
-                axis.set(deltaQuaternion.x, deltaQuaternion.y, deltaQuaternion.z).normalize();
-
-                // Project the rotation axis onto the plane's local axes to get control inputs
-                const localRotationAxis = axis.clone().applyQuaternion(currentQuaternion.invert());
-
-                // Simple P-controller for rotation rates (adjust gain as needed)
-                const rotationGain = 2.5;
-                apInput.pitch = THREE.MathUtils.clamp(localRotationAxis.x * angle * rotationGain, -1, 1);
-                apInput.yaw = THREE.MathUtils.clamp(localRotationAxis.y * angle * rotationGain, -1, 1);
-                apInput.roll = THREE.MathUtils.clamp(-localRotationAxis.z * angle * rotationGain, -1, 1); // Roll is often inverted relative to Z rotation axis
-
-                // --- Throttle Control ---
-                // Maintain a certain speed or adjust based on distance/closing speed (simplified: constant high throttle)
-                apInput.throttle = 0.9; // Maintain high speed to intercept
-
-                // --- Firing Control ---
-                if (distanceToTarget < ENEMY_SHOOT_RANGE && angleToTarget < ENEMY_SHOOT_ANGLE * 0.8) { // Slightly tighter angle for AP
-                    if (now - player.lastFireTime >= PLAYER_FIRE_COOLDOWN) {
-                        apInput.fire = true;
-                        fireProjectile(); // Use player's fire function
-                        player.lastFireTime = now; // Update player's last fire time
-                    }
-                }
-
-                // --- Reuse NormalFlightState Physics (with AP inputs) ---
-                // This section largely mirrors NormalFlightState.update, but uses `apInput` instead of `inputState`
-
-                // Calculate Orientation Vectors (already done above)
-                // Calculate Aerodynamic Angles
-                const speedSq = player.velocity.lengthSq();
-                let angleOfAttack = 0;
-                if (speedSq > 0.1) {
-                    const relativeWind = player.velocity.clone().normalize();
-                    const windForwardComponent = relativeWind.dot(forward);
-                    const windUpComponent = relativeWind.dot(up);
-                    angleOfAttack = Math.atan2(-windUpComponent, windForwardComponent);
-                }
-
-                // Stall Check (Autopilot can stall!)
-                if (angleOfAttack > MAX_ANGLE_OF_ATTACK) {
-                    console.log("Autopilot: STALL DETECTED! Disengaging.");
-                    autopilotStatusElement.style.display = 'none';
-                    stallWarningElement.style.display = 'block';
-                    return new StalledFlightState(); // Transition to stalled state
-                }
-
-                // Calculate Forces
-                const netForce = new THREE.Vector3(0, 0, 0);
-                const gravityForce = new THREE.Vector3(0, -GRAVITY * player.mass, 0);
-                netForce.add(gravityForce);
-                const thrustMagnitude = player.throttleLevel * MAX_THRUST; // Use player's current throttle level (AP adjusts this)
-                const thrustForce = forward.clone().multiplyScalar(thrustMagnitude);
-                netForce.add(thrustForce);
-
-                if (speedSq > 0.1) {
-                    const speed = Math.sqrt(speedSq);
-                    const Cl = calculateLiftCoefficient(angleOfAttack, false);
-                    const Cd = calculateDragCoefficient(angleOfAttack, false, speed);
-                    const dynamicPressure = 0.5 * AIR_DENSITY * speedSq;
-                    const liftMagnitude = dynamicPressure * WING_AREA * Cl;
-                    const liftDirection = new THREE.Vector3().crossVectors(player.velocity, right).normalize();
-                    if (liftDirection.dot(up) < 0) liftDirection.negate();
-                    const liftForce = liftDirection.multiplyScalar(liftMagnitude);
-                    netForce.add(liftForce);
-                    const dragMagnitude = dynamicPressure * WING_AREA * Cd;
-                    const dragForce = player.velocity.clone().normalize().multiplyScalar(-dragMagnitude);
-                    netForce.add(dragForce);
-                }
-
-                // Calculate Moments and Angular Acceleration
-                let totalPitchMoment = 0;
-                const trimPitchInfluence = player.elevatorTrim * player.pitchSpeed * TRIM_AUTHORITY; // AP doesn't use trim directly, but it affects physics
-                const controlInputPitch = apInput.pitch * player.pitchSpeed; // Use AP pitch input
-                const controlSurfaceMoment = PITCH_CONTROL_AUTHORITY * (controlInputPitch + trimPitchInfluence);
-                totalPitchMoment += controlSurfaceMoment;
-
-                if (speedSq > 0.1) {
-                    // Reusing liftForce calculated earlier might be slightly inaccurate if netForce changed, but should be close enough.
-                    // Or recalculate liftMagnitude based on Cl and dynamicPressure for accuracy.
-                    const speed = Math.sqrt(speedSq);
-                    const dynamicPressure = 0.5 * AIR_DENSITY * speedSq; // Reuse or recalculate
-                    const Cl = calculateLiftCoefficient(angleOfAttack, false); // Assume AP tries to avoid stall
-                    const liftMagnitude = dynamicPressure * WING_AREA * Cl; // More accurate lift for moment calc
-
-                    // 2a. Main Wing Aerodynamic Moment
-                    const aeroPitchMoment = liftMagnitude * COL_OFFSET_Z;
-                    totalPitchMoment += aeroPitchMoment;
-
-                    // 2b. Tail Stability Moment
-                    const tailStabilityMoment = -TAIL_STABILITY_FACTOR * angleOfAttack * (dynamicPressure / 1000);
-                    totalPitchMoment += tailStabilityMoment;
-
-                    // 2c. Low Speed Pitch Down Moment (Keep this for safety)
-                    const lowSpeedFactor = Math.max(0, 1 - speed / LOW_SPEED_THRESHOLD);
-                    const lowSpeedPitchDownMoment = -LOW_SPEED_PITCH_FACTOR * lowSpeedFactor;
-                    totalPitchMoment += lowSpeedPitchDownMoment;
-                }
-                const pitchDampingMoment = -PITCH_DAMPING * player.rotationSpeed.pitch;
-                totalPitchMoment += pitchDampingMoment;
-
-                // Update Angular Velocities
-                const pitchAngularAccel = totalPitchMoment / player.momentOfInertiaPitch;
-                player.rotationSpeed.pitch += pitchAngularAccel * deltaTime;
-
-                // Use AP Roll & Yaw inputs (lerped for smoothness)
-                const targetRollSpeed = apInput.roll * player.rollSpeed;
-                const targetYawSpeed = apInput.yaw * player.yawSpeed;
-                const lerpFactor = 5 * deltaTime; // AP can react faster?
-                player.rotationSpeed.roll = THREE.MathUtils.lerp(player.rotationSpeed.roll, targetRollSpeed, lerpFactor);
-                player.rotationSpeed.yaw = THREE.MathUtils.lerp(player.rotationSpeed.yaw, targetYawSpeed, lerpFactor);
-
-                // Apply Roll-Induced Yaw/Turn (same as normal flight)
-                 if (Math.abs(playerPlane.rotation.z) > 0.01) {
-                     const rollAngle = playerPlane.rotation.z;
-                     const pitchAngle = playerPlane.rotation.x;
-                     const turnMagnitude = -Math.sin(rollAngle) * Math.cos(pitchAngle) * ROLL_INDUCED_TURN_FACTOR * player.speed * deltaTime;
-                     if (Math.abs(turnMagnitude) > 0.0001) {
-                         const worldUp = new THREE.Vector3(0, 1, 0);
-                         const turnRotation = new THREE.Quaternion().setFromAxisAngle(worldUp, turnMagnitude * 0.05);
-                         player.velocity.applyQuaternion(turnRotation);
-                         playerPlane.rotateOnWorldAxis(worldUp, turnMagnitude * 0.05);
-                     }
-                 }
-
-                // Update Linear Velocity & Position
-                const acceleration = netForce.divideScalar(player.mass);
-                player.velocity.add(acceleration.multiplyScalar(deltaTime));
-                playerPlane.position.add(player.velocity.clone().multiplyScalar(deltaTime));
-
-                // Update Rotation
-                playerPlane.rotateZ(player.rotationSpeed.roll * deltaTime);
-                playerPlane.rotateX(player.rotationSpeed.pitch * deltaTime);
-                playerPlane.rotateY(player.rotationSpeed.yaw * deltaTime);
-
-                // Update Throttle Level based on AP input
-                const throttleAdjustmentRate = 0.8; // How quickly AP adjusts throttle
-                player.throttleLevel += (apInput.throttle - player.throttleLevel) * throttleAdjustmentRate * deltaTime;
-                player.throttleLevel = Math.max(0, Math.min(1, player.throttleLevel));
-
-                // --- State Transition Check: Landing/Crashing (AP should avoid this ideally, but check anyway) ---
-                const altitude = playerPlane.position.y - GROUND_LEVEL;
-                if (altitude < 0) {
-                     console.log("Autopilot: CRASH! Disengaging.");
-                     takeDamage(COLLISION_DAMAGE * 3);
-                     playerPlane.position.y = GROUND_LEVEL;
-                     player.velocity.set(0,0,0);
-                     autopilotStatusElement.style.display = 'none';
-                     if (player.health > 0) {
-                         return new LandedState(); // Treat crash as landing if survived
-                     } else {
-                         return this; // Stay here until game over logic
-                     }
-                }
-                // AP doesn't intentionally land, so no landing check needed here.
-
-                // --- Check for Manual Disengagement ---
-                // If player presses 'P' again, handleInput will set autopilotToggle,
-                // and updatePlayer will handle the transition back.
-
-                // Remain in AutopilotFlightState
-                stallWarningElement.style.display = 'none'; // Hide stall warning unless actually stalled
-                return this;
-            }
-        }
-
-
-
-
-        // --- Update Functions ---
-        function updatePlayer(deltaTime) {
-            if (!gameActive || !playerPlane || !player.currentState) return;
-
-            handleInput(deltaTime); // Get latest input
-
-            // Reset / Game Over Check
-            if (inputState.reset) {
-                resetGame();
-                return; // Exit early as init handles state
-            }
-// --- Autopilot Toggle Logic ---
-if (inputState.autopilotToggle) {
-    inputState.autopilotToggle = false; // Consume the toggle event
-    if (player.currentState instanceof AutopilotFlightState) {
-        // Turn OFF Autopilot
-        console.log("Autopilot Disengaged (Manual)");
-        autopilotStatusElement.style.display = 'none';
-        // Revert to the state before autopilot, or default to NormalFlight if something went wrong
-        player.currentState = player.previousState || new NormalFlightState();
-        player.previousState = null; // Clear the stored state
-    } else if (player.currentState instanceof NormalFlightState || player.currentState instanceof StalledFlightState) {
-        // Turn ON Autopilot (only from Normal or Stalled states)
-        if (enemies.length > 0) {
-            player.previousState = player.currentState; // Store the current state
-            player.currentState = new AutopilotFlightState();
+<body class="bg-gray-900 text-white min-h-screen flex flex-col items-center justify-center p-6">
+
+  <div class="bg-gray-800 p-8 rounded-lg shadow-xl text-center max-w-md w-full">
+    <h1 class="text-4xl font-bold mb-8 text-cyan-400">Game Hub</h1>
+
+    <p class="mb-6 text-gray-300">Select a game to play:</p>
+
+    <ul id="gameLinks" class="space-y-4">
+      <li>
+        <a href="/aerohearts.html"
+          class="game-link block w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 ease-in-out transform hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-opacity-75">
+          Aerohearts
+        </a>
+      </li>
+      <li>
+        <a href="/planes.html"
+          class="game-link block w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 ease-in-out transform hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:ring-opacity-75">
+          Planes!
+        </a>
+      </li>
+    </ul>
+  </div>
+
+  <script>
+    // --- Gamepad Controller Support ---
+
+    let gamepads = {}; // Store connected gamepads
+    let focusedLinkIndex = -1; // Index of the currently focused link (-1 means none)
+    const links = document.querySelectorAll('.game-link'); // Get all game links
+    let animationFrameId = null; // ID for the animation frame loop
+    let dpadPressed = {up: false, down: false}; // Track D-pad state to prevent rapid scrolling
+    let actionButtonPressed = false; // Track action button state
+
+    // Function to update focus based on index
+    function updateFocus() {
+      links.forEach((link, index) => {
+        if (index === focusedLinkIndex) {
+          link.classList.add('controller-focus'); // Add focus style
+          link.focus(); // Set browser focus (optional, but good practice)
         } else {
-            showMessage("No enemies to target!", 1500);
+          link.classList.remove('controller-focus'); // Remove focus style
         }
-    } else {
-        // Cannot engage autopilot from Landed state, etc.
-        showMessage("Cannot engage autopilot now!", 1500);
+      });
     }
-}
 
-// Delegate update logic to the current state (might have been changed by toggle)
-if (player.currentState) { // Ensure state exists
-    const nextState = player.currentState.update(player, inputState, deltaTime);
+    // Function to handle gamepad input
+    function pollGamepads() {
+      const connectedGamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+      let inputDetected = false;
 
-    // Update current state if it changed (and wasn't just changed by the toggle)
-    if (nextState !== player.currentState) {
-        // If we are currently in Autopilot, and the state changes (e.g. to Stalled), clear previousState
-        if (player.currentState instanceof AutopilotFlightState) {
-            player.previousState = null; // Autopilot transition overrides manual return state
-            autopilotStatusElement.style.display = 'none'; // Hide status if AP transitions out
-        }
-        player.currentState = nextState;
-    }
-} else {
-    console.error("Player state is null!");
-    player.currentState = new NormalFlightState(); // Recover if state becomes null
-}
-            // Removed extra closing brace here
+      for (const gamepad of connectedGamepads) {
+        if (!gamepad) continue; // Skip if gamepad is null (disconnected)
 
-            // Update player speed property (for display/other logic) based on velocity vector
-            player.speed = player.velocity.length();
+        // --- D-pad or Analog Stick Vertical Navigation ---
+        const dpadUp = gamepad.buttons[12]?.pressed;
+        const dpadDown = gamepad.buttons[13]?.pressed;
+        const stickY = gamepad.axes[1]; // Typically the Y-axis of the left stick
 
-            // --- Update Camera --- (Done after state update and position/rotation changes)
-            const desiredCameraPosition = playerPlane.position.clone().add( thirdPersonCameraOffset.clone().applyQuaternion(playerPlane.quaternion) );
-            // Prevent camera going below ground
-            desiredCameraPosition.y = Math.max(desiredCameraPosition.y, GROUND_LEVEL + 2);
-            // Smoothly interpolate camera position and look at the plane
-            camera.position.lerp(desiredCameraPosition, 5 * deltaTime);
-            camera.lookAt(playerPlane.position);
-        }
-
-        function updateEnemies(deltaTime) { /* ... (No changes) ... */
-             if (!gameActive || !playerPlane) return;const now=clock.getElapsedTime();enemies.forEach(t=>{const e=new THREE.Vector3(0,0,1).applyQuaternion(t.quaternion),a=t.position,o=playerPlane.position;a.y<GROUND_LEVEL+30&&t.rotateX(Math.PI/180*10*deltaTime);const n=a.distanceTo(o),r=o.clone().sub(a).normalize(),s=e.angleTo(r);n<1.5*ENEMY_SHOOT_RANGE&&!(player.currentState instanceof LandedState)?(t.quaternion.slerp(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1),r),t.userData.turnRate*deltaTime),n<ENEMY_SHOOT_RANGE&&s<ENEMY_SHOOT_ANGLE&&now-t.userData.lastFireTime>=t.userData.fireCooldown&&enemyFireProjectile(t)):t.rotateY(.2*(Math.random()-.45)*deltaTime),e.applyQuaternion(t.quaternion),t.userData.velocity.copy(e).multiplyScalar(t.userData.speed),t.position.add(t.userData.velocity.clone().multiplyScalar(deltaTime))}) // Check player state instead of isLanded
-         }
-
-         function updateProjectiles(deltaTime) { /* ... (No changes) ... */
-             if (!gameActive) return; const now = clock.getElapsedTime(); for (let i = projectiles.length - 1; i >= 0; i--) { const proj = projectiles[i]; if (!proj || !proj.parent) continue; const moveDelta = proj.userData.velocity.clone().multiplyScalar(deltaTime); proj.position.add(moveDelta); if (now - proj.userData.spawnTime > PROJECTILE_LIFETIME || proj.position.y < GROUND_LEVEL - 10) { scene.remove(proj); projectiles.splice(i, 1); } }
+        // Handle D-pad Down or Stick Down
+        if ((dpadDown && !dpadPressed.down) || (stickY > 0.5 && !dpadPressed.down)) {
+          if (focusedLinkIndex < links.length - 1) {
+            focusedLinkIndex++;
+          } else {
+            focusedLinkIndex = 0; // Wrap around to the top
           }
-
-
-        function checkCollisions() { /* ... (No changes - still uses cone check for mountains) ... */
-             if (!gameActive || !playerPlane) return;
-             const now = clock.getElapsedTime();
-             const playerSize = new THREE.Vector3(10, 2, 8);
-             const playerBox = new THREE.Box3().setFromCenterAndSize(playerPlane.position, playerSize);
-             const collisionCooldown = 0.5;
-
-             // --- Ring Collection (Health Restore) ---
-             for (let i = rings.length - 1; i >= 0; i--) {
-                 const ring = rings[i];
-                 if (!ring.userData.collected) {
-                     const ringBox = new THREE.Box3().setFromObject(ring).expandByScalar(-2);
-                     if (playerBox.intersectsBox(ringBox)) {
-                         ring.userData.collected = true;
-                         scene.remove(ring);
-                         rings.splice(i, 1);
-                         score += 10; // Keep score for rings.
-                         scoreElement.textContent = `Score: ${score}`;
-                         player.health = Math.min(player.maxHealth, player.health + 25); // Restore 25 health
-                         updateHealthDisplay(); // Update health bar/text
-                         console.log("Collected heart, health restored to:", player.health);
-                     }
-                 }
-             }
-
-             // --- Projectile Collisions ---
-             for (let i = projectiles.length - 1; i >= 0; i--) {
-                 const proj = projectiles[i];
-                 if (!proj || !proj.parent) continue;
-                 const projBox = new THREE.Box3().setFromObject(proj);
-
-                 // Player projectile hitting enemy
-                 if (proj.userData.owner === 'player') {
-                     for (let j = enemies.length - 1; j >= 0; j--) {
-                         const enemy = enemies[j];
-                         if (!enemy || !enemy.parent) continue;
-                         const enemyBox = new THREE.Box3().setFromObject(enemy);
-                         if (projBox.intersectsBox(enemyBox)) {
-                             scene.remove(proj);
-                             projectiles.splice(i, 1);
-                             scene.remove(enemy);
-                             enemies.splice(j, 1);
-                             score += 50; // Award points
-                             scoreElement.textContent = `Score: ${score}`;
-                             updateEnemyCountDisplay(); // Update enemy count display
-                             console.log("Enemy destroyed! Score:", score, "Enemies left:", enemies.length);
-                             break; // Projectile can only hit one enemy
-                         }
-                     }
-                 }
-                 // Enemy projectile hitting player
-                 else if (proj.userData.owner === 'enemy') {
-                     if (playerPlane && playerPlane.parent && projBox.intersectsBox(playerBox)) {
-                         scene.remove(proj);
-                         projectiles.splice(i, 1);
-                         takeDamage(ENEMY_PROJECTILE_DAMAGE);
-                         break; // Projectile is gone
-                     }
-                 }
-             }
-
-             // --- Player Collision with Enemies/Terrain ---
-             if (now - player.lastHitTime > collisionCooldown) {
-                 let collisionDetected = false;
-
-                 // Player hitting enemy
-                 for (let j = enemies.length - 1; j >= 0; j--) {
-                     const enemy = enemies[j];
-                     if (!enemy || !enemy.parent) continue;
-                     const enemyBox = new THREE.Box3().setFromObject(enemy);
-                     if (playerBox.intersectsBox(enemyBox)) {
-                         takeDamage(COLLISION_DAMAGE);
-                         scene.remove(enemy);
-                         enemies.splice(j, 1);
-                         updateEnemyCountDisplay(); // Update enemy count display
-                         collisionDetected = true;
-                         console.log("Collided with enemy! Enemies left:", enemies.length);
-                         break;
-                     }
-                 }
-
-                 // Player hitting terrain (excluding ground handled by states)
-                 if (!collisionDetected && !(player.currentState instanceof LandedState) && playerPlane.position.y > GROUND_LEVEL + 1) {
-                     scene.children.forEach(obj => {
-                         if (collisionDetected || !obj.userData || obj.userData.type !== 'terrain') return;
-
-                         const playerPos = playerPlane.position;
-                         const terrainPos = obj.position;
-                         const terrainHeight = obj.userData.height || 10;
-                         const terrainRadius = obj.userData.radius || 5;
-
-                         if (obj.userData.isMountain) { // Cone check for mountains
-                             const dx = playerPos.x - terrainPos.x;
-                             const dz = playerPos.z - terrainPos.z;
-                             const horizontalDist = Math.sqrt(dx*dx + dz*dz);
-                             if (horizontalDist < terrainRadius + playerSize.x / 2) { // Rough horizontal overlap check
-                                 const coneHeightAtDist = terrainHeight * (1 - (horizontalDist / terrainRadius));
-                                 if (playerPos.y < coneHeightAtDist + playerSize.y / 2) { // Vertical check
-                                     console.log("Collision with MOUNTAIN cone:", obj);
-                                     takeDamage(COLLISION_DAMAGE);
-                                     collisionDetected = true;
-                                 }
-                             }
-                         } else { // Box check for other terrain objects (houses)
-                             const terrainSize = new THREE.Vector3(
-                                 terrainRadius * 2 + TERRAIN_COLLISION_PADDING,
-                                 terrainHeight + TERRAIN_COLLISION_PADDING,
-                                 terrainRadius * 2 + TERRAIN_COLLISION_PADDING
-                             );
-                             const terrainCenter = obj.position.clone();
-                             // Adjust center for non-group meshes if needed (BoxGeometry is centered by default)
-                             // if (obj instanceof THREE.Group) { terrainCenter.y = terrainHeight / 2; }
-                             const terrainBox = new THREE.Box3().setFromCenterAndSize(terrainCenter, terrainSize);
-                             if (playerBox.intersectsBox(terrainBox)) {
-                                 console.log("Collision with terrain object (box):", obj);
-                                 takeDamage(COLLISION_DAMAGE);
-                                 collisionDetected = true;
-                             }
-                         }
-                     });
-                 }
-
-                 if (collisionDetected) {
-                     player.lastHitTime = now;
-                 }
-             }
-         }
-
-
-        function animate() {
-             if (!gameActive && !document.hidden) { animationFrameId = requestAnimationFrame(animate); return; }
-             if (!gameActive) { animationFrameId = null; return; }
-             animationFrameId = requestAnimationFrame(animate);
-             const deltaTime = Math.min(clock.getDelta(), 0.05); // Clamp delta time to prevent large jumps
-
-             if (deltaTime > 0) { // Ensure deltaTime is positive
-                 updatePlayer(deltaTime);
-                 updateEnemies(deltaTime);
-                 updateProjectiles(deltaTime);
-                 updateEnemyIndicators();
-                 checkCollisions();
-                 updateFlightIndicators();
-             } else {
-                 // console.warn("Skipping frame due to zero or negative deltaTime:", deltaTime);
-             }
-             renderer.render(scene, camera);
+          updateFocus();
+          dpadPressed.down = true; // Mark as pressed
+          inputDetected = true;
+        } else if (!dpadDown && stickY <= 0.5) {
+          dpadPressed.down = false; // Reset when released
         }
 
-        function onWindowResize() { /* ... (No changes) ... */
-            if(camera&&renderer){camera.aspect=window.innerWidth/window.innerHeight,camera.updateProjectionMatrix(),renderer.setSize(window.innerWidth,window.innerHeight)}
-         }
-
-        // --- Flight Indicator Update --- (No changes)
-        function updateFlightIndicators() {
-            if (!gameActive || !playerPlane) return;
-
-            // Throttle (0-100%)
-            const throttlePercent = Math.round(player.throttleLevel * 100);
-            throttleIndicatorElement.textContent = `THR: ${throttlePercent}%`;
-
-            // Altitude (meters above ground level)
-            const altitude = Math.max(0, Math.round(playerPlane.position.y - GROUND_LEVEL));
-            altitudeIndicatorElement.textContent = `ALT: ${altitude} m`;
-
-            // Speed (kph - assuming speed unit is roughly m/s, convert to kph)
-            const speedKph = Math.round(player.speed * 3.6);
-            speedIndicatorElement.textContent = `SPD: ${speedKph} kph`;
-
-            // Elevator Trim (-100% to +100%)
-            const trimPercent = Math.round(player.elevatorTrim * 100);
-            trimIndicatorElement.textContent = `TRIM: ${trimPercent}%`;
+        // Handle D-pad Up or Stick Up
+        if ((dpadUp && !dpadPressed.up) || (stickY < -0.5 && !dpadPressed.up)) {
+          if (focusedLinkIndex > 0) {
+            focusedLinkIndex--;
+          } else if (focusedLinkIndex === -1) { // If nothing focused, focus last
+            focusedLinkIndex = links.length - 1;
+          } else {
+            focusedLinkIndex = links.length - 1; // Wrap around to the bottom
+          }
+          updateFocus();
+          dpadPressed.up = true; // Mark as pressed
+          inputDetected = true;
+        } else if (!dpadUp && stickY >= -0.5) {
+          dpadPressed.up = false; // Reset when released
         }
 
-        // --- Start the game ---
-        init();
 
-    </script>
+        // --- Action Button (e.g., A button / Cross button) ---
+        // Typically button 0 on most controllers (Xbox A, PS Cross)
+        const actionButton = gamepad.buttons[0]?.pressed;
+
+        if (actionButton && !actionButtonPressed) {
+          if (focusedLinkIndex !== -1) {
+            links[focusedLinkIndex].click(); // Simulate click on the focused link
+            inputDetected = true;
+            actionButtonPressed = true; // Mark as pressed
+            // Stop polling once action is taken
+            if (animationFrameId) {
+              cancelAnimationFrame(animationFrameId);
+              animationFrameId = null;
+            }
+            return; // Exit loop
+          }
+        } else if (!actionButton) {
+          actionButtonPressed = false; // Reset when released
+        }
+      }
+
+      // If no input detected and no link is focused, focus the first link
+      if (!inputDetected && focusedLinkIndex === -1 && links.length > 0) {
+        focusedLinkIndex = 0;
+        updateFocus();
+      }
+
+      // Continue polling
+      if (animationFrameId) { // Check if polling is still active
+        animationFrameId = requestAnimationFrame(pollGamepads);
+      }
+    }
+
+    // --- Event Listeners for Gamepad Connection/Disconnection ---
+
+    window.addEventListener("gamepadconnected", (event) => {
+      console.log("Gamepad connected:", event.gamepad);
+      gamepads[event.gamepad.index] = event.gamepad;
+      // Start polling if it's not already running
+      if (!animationFrameId) {
+        console.log("Starting gamepad polling...");
+        // Start focusing on the first link when a controller connects
+        if (focusedLinkIndex === -1 && links.length > 0) {
+          focusedLinkIndex = 0;
+          updateFocus();
+        }
+        animationFrameId = requestAnimationFrame(pollGamepads);
+      }
+    });
+
+    window.addEventListener("gamepaddisconnected", (event) => {
+      console.log("Gamepad disconnected:", event.gamepad);
+      delete gamepads[event.gamepad.index];
+      // If no gamepads are connected, stop polling
+      if (Object.keys(gamepads).length === 0 && animationFrameId) {
+        console.log("Stopping gamepad polling...");
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+        // Remove focus style when controller disconnects
+        if (focusedLinkIndex !== -1) {
+          links[focusedLinkIndex].classList.remove('controller-focus');
+          focusedLinkIndex = -1; // Reset focus index
+        }
+      }
+    });
+
+    // Initial check in case a gamepad is already connected on page load
+    const initialGamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+    let alreadyConnected = false;
+    for (const gp of initialGamepads) {
+      if (gp) {
+        gamepads[gp.index] = gp;
+        alreadyConnected = true;
+      }
+    }
+    if (alreadyConnected && !animationFrameId) {
+      console.log("Gamepad already connected. Starting polling...");
+      // Start focusing on the first link
+      if (focusedLinkIndex === -1 && links.length > 0) {
+        focusedLinkIndex = 0;
+        updateFocus();
+      }
+      animationFrameId = requestAnimationFrame(pollGamepads);
+    }
+
+  </script>
+
 </body>
+
 </html>

@@ -1,0 +1,1476 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>3D Driving Challenge</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/BufferGeometryUtils.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: 'Inter', sans-serif;
+      background-color: #f0f0f0;
+      -webkit-user-select: none;
+      /* Safari */
+      -ms-user-select: none;
+      /* IE 10 and IE 11 */
+      user-select: none;
+      /* Standard syntax */
+    }
+
+    /* Prevent text selection */
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* UI Elements Styling */
+    #ui-container,
+    #message-box,
+    #difficulty-select,
+    #controls-info {
+      position: absolute;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+      z-index: 10;
+      /* Ensure UI is above canvas */
+    }
+
+    #ui-container {
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      justify-content: space-between;
+      color: white;
+      text-shadow: 1px 1px 2px black;
+      font-size: 1.2em;
+      pointer-events: none;
+      padding: 10px;
+      background-color: rgba(0, 0, 0, 0.4);
+    }
+
+    #message-box,
+    #difficulty-select {
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background-color: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 30px 50px;
+      font-size: 1.8em;
+      text-align: center;
+    }
+
+    #message-box {
+      display: none;
+      /* Hidden initially */
+    }
+
+    #difficulty-select {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 15px;
+    }
+
+    /* Start visible */
+    #controls-info {
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #333;
+      background-color: rgba(255, 255, 255, 0.7);
+      padding: 5px 10px;
+      font-size: 0.9em;
+      display: none;
+      /* Hidden initially */
+    }
+
+    /* Button Styling */
+    .difficulty-button,
+    #restart-button {
+      margin-top: 10px;
+      padding: 10px 20px;
+      font-size: 0.8em;
+      border: 2px solid transparent;
+      /* Add border for selection highlight */
+      border-radius: 8px;
+      color: white;
+      cursor: pointer;
+      transition: background-color 0.3s ease, border-color 0.2s ease;
+      pointer-events: auto;
+      min-width: 120px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+
+    .difficulty-button.easy {
+      background-color: #28a745;
+    }
+
+    .difficulty-button.easy:hover {
+      background-color: #218838;
+    }
+
+    .difficulty-button.medium {
+      background-color: #ffc107;
+      color: #333;
+    }
+
+    .difficulty-button.medium:hover {
+      background-color: #e0a800;
+    }
+
+    .difficulty-button.hard {
+      background-color: #dc3545;
+    }
+
+    .difficulty-button.hard:hover {
+      background-color: #c82333;
+    }
+
+    /* Style for gamepad selected button */
+    .difficulty-button.selected {
+      border-color: #ffffff;
+      /* White border */
+      box-shadow: 0 0 10px rgba(255, 255, 255, 0.7);
+      /* Glow effect */
+    }
+
+
+    #restart-button {
+      background-color: #007bff;
+    }
+
+    #restart-button:hover {
+      background-color: #0056b3;
+    }
+
+    /* Mobile Touch Controls Styling */
+    #touch-controls {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 15%;
+      /* Area for controls */
+      display: none;
+      /* Hidden by default, shown on touch devices */
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 20px;
+      box-sizing: border-box;
+      pointer-events: none;
+      /* Allow clicks through container */
+      z-index: 15;
+      /* Above other UI */
+    }
+
+    .touch-button {
+      background-color: rgba(80, 80, 80, 0.6);
+      color: white;
+      border: 2px solid rgba(255, 255, 255, 0.5);
+      border-radius: 50%;
+      /* Circular buttons */
+      width: 60px;
+      /* Size */
+      height: 60px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 1.5em;
+      font-weight: bold;
+      text-align: center;
+      pointer-events: auto;
+      /* Buttons are clickable */
+      user-select: none;
+      /* Prevent text selection */
+      -webkit-user-select: none;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+    }
+
+    .touch-button:active {
+      background-color: rgba(120, 120, 120, 0.8);
+    }
+
+    #brake-button {
+      margin-left: 10%;
+    }
+
+    /* Position Brake */
+    #gas-button {
+      margin-right: 10%;
+    }
+
+    /* Position Gas */
+  </style>
+</head>
+
+<body>
+  <div id="difficulty-select">
+    <h2>Select Difficulty</h2>
+    <button class="difficulty-button easy" data-difficulty="easy">Easy</button>
+    <button class="difficulty-button medium" data-difficulty="medium">Medium</button>
+    <button class="difficulty-button hard" data-difficulty="hard">Hard</button>
+  </div>
+
+  <div id="game-container" style="display: none;"></div>
+
+  <div id="ui-container" style="display: none;">
+    <div>Time Left: <span id="time">0</span>s</div>
+    <div>Damage: <span id="damage">0</span>%</div>
+    <div>Checkpoints: <span id="checkpoints-passed">0</span> / <span id="checkpoints-total">0</span></div>
+  </div>
+
+  <div id="message-box">
+    <p id="message-text"></p>
+    <button id="restart-button">Restart</button>
+  </div>
+
+  <div id="controls-info">
+    Controls: Arrow Keys / Gamepad / Tilt (Mobile) / Touch
+  </div>
+
+  <div id="touch-controls">
+    <div id="brake-button" class="touch-button">B</div>
+    <div id="gas-button" class="touch-button">G</div>
+  </div>
+
+
+  <script>
+    // Ensure BufferGeometryUtils is loaded
+    if (typeof THREE.BufferGeometryUtils === 'undefined') {
+      console.error("THREE.BufferGeometryUtils is not loaded. Make sure the script is included after three.js.");
+    }
+
+    // --- Global Variables ---
+    let scene, camera, renderer;
+    let car, carBody, wheels = [], house, ground, roadMesh;
+    let obstacles = [], hearts = [], checkpoints = [], fences = []; // Added fences array
+    let keys = {}; // Keyboard state
+
+    // Input State
+    let gamepad = null; // Store active gamepad
+    let gamepadButtons = {}; // Store current gamepad button states
+    let gamepadAxes = {}; // Store current gamepad axes states
+    let previousGamepadButtons = {}; // Store previous frame's button states
+    let tiltGamma = 0; // Store device orientation gamma (left/right tilt)
+    let touchGas = false; // State for touch gas button
+    let touchBrake = false; // State for touch brake button
+    let isTouchDevice = false; // Flag for touch device detection
+
+    // Game State & Config
+    let gameActive = false;
+    let currentScreen = 'difficulty'; // 'difficulty', 'game', 'gameOver'
+    let currentDifficulty = 'medium';
+    let selectedDifficultyIndex = 0; // 0: Easy, 1: Medium, 2: Hard
+    let timeLeft = 60;
+    let timerInterval = null;
+    let animationFrameId = null;
+    let carHealth = 100; // Changed to 100 for percentage calculation
+    let nextCheckpointIndex = 0;
+    let totalCheckpoints = 0;
+
+    // Constants
+    const MAX_HEALTH = 100; // Use 100 for health
+    const OBSTACLE_DAMAGE = 25; // Damage as percentage
+    const HEART_REPAIR = 30; // Repair as percentage
+    const CHECKPOINT_TIME_BONUS = 10;
+    const ROAD_Y_OFFSET = 0.01;
+    const BASE_ROAD_WIDTH = 5; // Base width unit
+    const ROAD_WIDTH_MULTIPLIER = 3; // Road is 3x base width
+    const ACTUAL_ROAD_WIDTH = BASE_ROAD_WIDTH * ROAD_WIDTH_MULTIPLIER;
+    const FENCE_OFFSET = 0.5; // How far from the road edge the fence is placed
+    const FENCE_HEIGHT = 1.5;
+    const FENCE_THICKNESS = 0.2;
+    const FENCE_POST_EVERY = 3; // Place a post every N meters along the road
+
+    const GAMEPAD_DEADZONE = 0.15; // Deadzone for analog sticks
+    const TILT_SENSITIVITY = 0.002; // Adjust for tilt steering sensitivity
+    const GAMEPAD_AXIS_DEADZONE = 0.2; // Deadzone for D-pad/stick navigation
+    const GAMEPAD_BUTTON_A = 0; // Standard 'confirm' button
+    const GAMEPAD_BUTTON_START = 9; // Standard 'pause/start' button
+    const GAMEPAD_BUTTON_DPAD_UP = 12;
+    const GAMEPAD_BUTTON_DPAD_DOWN = 13;
+    const GAMEPAD_BUTTON_DPAD_LEFT = 14;
+    const GAMEPAD_BUTTON_DPAD_RIGHT = 15;
+    const GAMEPAD_AXIS_LEFT_Y = 1; // Standard left stick Y-axis
+
+    // Car Physics Parameters
+    const baseMaxSpeed = 0.5;
+    const baseAcceleration = 0.01;
+    const baseBraking = 0.02;
+    const baseSteeringSensitivity = 0.04;
+    const friction = 0.98;
+    let velocity = 0;
+    let steeringAngle = 0;
+    const maxSteerAngle = Math.PI / 6;
+    const wheelRadius = 0.4;
+
+    // Difficulty Settings
+    const difficultySettings = {
+      easy: {obstacleCount: 8, heartCount: 6, roadPoints: 5, roadVariance: 15, time: 75},
+      medium: {obstacleCount: 15, heartCount: 5, roadPoints: 8, roadVariance: 25, time: 60},
+      hard: {obstacleCount: 25, heartCount: 3, roadPoints: 12, roadVariance: 40, time: 50}
+    };
+
+    // DOM Elements
+    const difficultySelectDiv = document.getElementById('difficulty-select');
+    const difficultyButtons = document.querySelectorAll('.difficulty-button');
+    const gameContainerDiv = document.getElementById('game-container');
+    const uiContainerDiv = document.getElementById('ui-container');
+    const messageBoxDiv = document.getElementById('message-box');
+    const controlsInfoDiv = document.getElementById('controls-info');
+    const timeSpan = document.getElementById('time');
+    const damageSpan = document.getElementById('damage');
+    const checkpointsPassedSpan = document.getElementById('checkpoints-passed');
+    const checkpointsTotalSpan = document.getElementById('checkpoints-total');
+    const messageTextP = document.getElementById('message-text');
+    const restartButton = document.getElementById('restart-button');
+    const touchControlsDiv = document.getElementById('touch-controls');
+    const gasButton = document.getElementById('gas-button');
+    const brakeButton = document.getElementById('brake-button');
+
+
+    // --- Initialization Flow ---
+
+    function detectTouchDevice() {
+      try {
+        document.createEvent("TouchEvent");
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    // Called once on window load
+    function setupInitialScreen() {
+      console.log("Setting up initial screen (difficulty selection).");
+      currentScreen = 'difficulty';
+      selectedDifficultyIndex = 0; // Default to Easy
+      updateDifficultySelectionVisuals();
+
+      difficultyButtons.forEach(button => {
+        button.addEventListener('click', handleDifficultyClick);
+      });
+      restartButton.addEventListener('click', handleRestartClick); // For mouse click on restart
+
+      difficultySelectDiv.style.display = 'flex';
+      gameContainerDiv.style.display = 'none';
+      uiContainerDiv.style.display = 'none';
+      controlsInfoDiv.style.display = 'none';
+      messageBoxDiv.style.display = 'none';
+      touchControlsDiv.style.display = 'none'; // Ensure hidden initially
+
+      // Start animation loop immediately to handle gamepad input on difficulty screen
+      if (!animationFrameId) {
+        animate();
+      }
+    }
+
+    // Handles CLICKING a difficulty button
+    function handleDifficultyClick(event) {
+      const difficulty = event.target.getAttribute('data-difficulty');
+      startSelectedGame(difficulty);
+    }
+
+    // Starts the game with the chosen difficulty
+    function startSelectedGame(difficulty) {
+      currentDifficulty = difficulty;
+      console.log(`Difficulty selected: ${currentDifficulty}`);
+      currentScreen = 'game'; // Change screen state
+
+      difficultySelectDiv.style.display = 'none';
+      gameContainerDiv.style.display = 'block';
+      uiContainerDiv.style.display = 'flex';
+      controlsInfoDiv.style.display = 'block';
+      messageBoxDiv.style.display = 'none';
+
+      // Show touch controls only on touch devices
+      isTouchDevice = detectTouchDevice();
+      if (isTouchDevice) {
+        touchControlsDiv.style.display = 'flex';
+        console.log("Touch device detected, showing controls.");
+      } else {
+        touchControlsDiv.style.display = 'none';
+        console.log("Not a touch device.");
+      }
+
+      initGame(); // Initialize the actual game scene etc.
+    }
+
+    // Handles clicking the RESTART button (or pressing Start on gamepad)
+    function handleRestartClick() {
+      console.log("Restart triggered.");
+      cleanupGame(); // Clean up the current game instance if any
+      setupInitialScreen(); // Go back to difficulty selection
+    }
+
+
+    function initGame() {
+      console.log("Initializing game...");
+      try {
+        // Reset state
+        const settings = difficultySettings[currentDifficulty];
+        timeLeft = settings.time;
+        carHealth = MAX_HEALTH; // Reset health
+        velocity = 0; steeringAngle = 0;
+        nextCheckpointIndex = 0; totalCheckpoints = 0;
+        obstacles = []; hearts = []; checkpoints = []; fences = []; // Reset fences
+        keys = {};
+        tiltGamma = 0; touchGas = false; touchBrake = false;
+        gameActive = false; // Set to true after setup
+
+        // Scene, Camera, Renderer
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87ceeb);
+        scene.fog = new THREE.Fog(0x87ceeb, 50, 200);
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        renderer = new THREE.WebGLRenderer({antialias: true});
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        // Clear previous canvas if exists
+        while (gameContainerDiv.firstChild) {
+          gameContainerDiv.removeChild(gameContainerDiv.firstChild);
+        }
+        gameContainerDiv.appendChild(renderer.domElement);
+
+        // Lighting
+        setupLighting();
+
+        // Create Objects
+        createGround();
+        const roadCurve = createRoad(settings); // Returns the curve
+        if (!roadCurve) throw new Error("Failed to create road curve.");
+        createFences(roadCurve, ACTUAL_ROAD_WIDTH); // Create fences along the curve
+        createCar();
+        createHouse(roadCurve.getPoint(1)); // Place house at the end
+        createCheckpoints(roadCurve, settings);
+        createObstacles(settings.obstacleCount);
+        createHearts(settings.heartCount);
+
+        // Position Car/Camera at start
+        const startPoint = roadCurve.getPoint(0);
+        const tangent = roadCurve.getTangent(0).normalize();
+        car.position.set(startPoint.x, wheelRadius + ROAD_Y_OFFSET, startPoint.z);
+        car.lookAt(startPoint.x + tangent.x, wheelRadius + ROAD_Y_OFFSET, startPoint.z + tangent.z);
+        updateCameraPosition();
+
+        // Event Listeners
+        setupEventListeners();
+
+        // Update UI
+        updateTimerUI(); updateDamageUI(); updateCheckpointUI();
+
+        // Start Game
+        startTimer();
+        gameActive = true; // Game is now officially active
+        console.log("Game initialized successfully.");
+
+      } catch (error) {
+        console.error("Error during game initialization:", error);
+        messageTextP.textContent = "Error initializing game. Please try again.";
+        messageBoxDiv.style.backgroundColor = 'rgba(200, 0, 0, 0.8)';
+        messageBoxDiv.style.display = 'block';
+        currentScreen = 'gameOver'; // Treat error as game over
+        gameActive = false;
+        uiContainerDiv.style.display = 'none';
+        controlsInfoDiv.style.display = 'none';
+        touchControlsDiv.style.display = 'none';
+      }
+    }
+
+    function setupLighting() {
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+      scene.add(ambientLight);
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      directionalLight.position.set(20, 30, 10);
+      directionalLight.castShadow = true;
+      directionalLight.shadow.mapSize.width = 1024;
+      directionalLight.shadow.mapSize.height = 1024;
+      directionalLight.shadow.camera.near = 0.5;
+      directionalLight.shadow.camera.far = 100;
+      directionalLight.shadow.camera.left = -50;
+      directionalLight.shadow.camera.right = 50;
+      directionalLight.shadow.camera.top = 50;
+      directionalLight.shadow.camera.bottom = -50;
+      scene.add(directionalLight);
+    }
+
+    // --- Object Creation Functions ---
+    function createGround() {
+      const groundSize = 300;
+      const groundGeometry = new THREE.PlaneGeometry(groundSize, groundSize);
+      const groundMaterial = new THREE.MeshStandardMaterial({color: 0x207020, side: THREE.DoubleSide});
+      ground = new THREE.Mesh(groundGeometry, groundMaterial);
+      ground.rotation.x = -Math.PI / 2;
+      ground.receiveShadow = true;
+      scene.add(ground);
+      console.log("Ground created.");
+    }
+    function createRoad(settings) {
+      console.log("Creating road...");
+      const roadWidth = ACTUAL_ROAD_WIDTH;
+      const roadSegments = settings.roadPoints * 10; // More segments for smoother curve
+
+      // Generate curve points
+      const points = [new THREE.Vector3(0, ROAD_Y_OFFSET, 0)];
+      const roadLength = 150;
+      const roadWidthVariance = 80; // Max deviation from center
+      for (let i = 1; i <= settings.roadPoints; i++) {
+        const z = (i / settings.roadPoints) * roadLength;
+        const xVariance = (Math.random() - 0.5) * settings.roadVariance * (i / settings.roadPoints);
+        const clampedX = Math.max(-roadWidthVariance / 2, Math.min(roadWidthVariance / 2, xVariance));
+        points.push(new THREE.Vector3(clampedX, ROAD_Y_OFFSET, z));
+      }
+      if (points.length < 2) {console.error("Not enough points for road curve."); points.push(new THREE.Vector3(0, ROAD_Y_OFFSET, 10));}
+
+      const curve = new THREE.CatmullRomCurve3(points);
+
+      // Create road mesh geometry
+      const curvePoints = curve.getPoints(roadSegments);
+      const vertices = []; const normals = []; const uvs = []; const indices = [];
+
+      for (let i = 0; i <= roadSegments; i++) {
+        const point = curvePoints[i];
+        const tangent = curve.getTangentAt(i / roadSegments).normalize();
+        const normal = new THREE.Vector3(-tangent.z, 0, tangent.x); // Perpendicular vector on the XZ plane
+
+        // Calculate left and right vertices for this point
+        const vL = new THREE.Vector3().copy(point).addScaledVector(normal, roadWidth / 2);
+        const vR = new THREE.Vector3().copy(point).addScaledVector(normal, -roadWidth / 2);
+
+        vertices.push(vL.x, vL.y, vL.z); // Left vertex
+        vertices.push(vR.x, vR.y, vR.z); // Right vertex
+
+        normals.push(0, 1, 0); normals.push(0, 1, 0); // Normal points straight up
+        uvs.push(0, i / roadSegments); uvs.push(1, i / roadSegments); // UVs for texturing
+      }
+
+      // Create faces (indices)
+      for (let i = 0; i < roadSegments; i++) {
+        const idx1 = i * 2;       // Top left
+        const idx2 = i * 2 + 1;   // Top right
+        const idx3 = (i + 1) * 2; // Bottom left
+        const idx4 = (i + 1) * 2 + 1; // Bottom right
+
+        // Triangle 1: Top left, Top right, Bottom right
+        indices.push(idx1, idx2, idx4);
+        // Triangle 2: Top left, Bottom right, Bottom left
+        indices.push(idx1, idx4, idx3);
+      }
+
+      const geometry = new THREE.BufferGeometry();
+      geometry.setIndex(indices);
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+      geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+      geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+
+      const roadMaterial = new THREE.MeshStandardMaterial({color: 0x444444, side: THREE.DoubleSide});
+      roadMesh = new THREE.Mesh(geometry, roadMaterial);
+      roadMesh.receiveShadow = true; // Road can receive shadows
+      roadMesh.castShadow = false; // Road itself doesn't cast significant shadows
+      scene.add(roadMesh);
+
+      console.log("Road created successfully.");
+      return curve; // Return the curve for fence placement
+    }
+
+    function createFences(curve, roadWidth) {
+      console.log("Creating fences...");
+      if (typeof THREE.BufferGeometryUtils === 'undefined') {
+        console.error("THREE.BufferGeometryUtils is not loaded. Cannot merge fence geometries.");
+        return; // Stop execution if the utility is missing
+      }
+
+      const fenceMaterial = new THREE.MeshStandardMaterial({color: 0x6b4423}); // Brownish color
+      // Use slightly fewer segments for fence geometry than road for performance
+      const numFenceSegments = Math.floor(curve.getLength() / (FENCE_POST_EVERY / 2));
+      const curvePoints = curve.getPoints(numFenceSegments);
+
+      const leftFenceGeometries = [];
+      const rightFenceGeometries = [];
+      fences = []; // Clear existing fences (used for collision)
+
+      // --- Reusable Geometry Definitions ---
+      const postGeometry = new THREE.BoxGeometry(FENCE_THICKNESS * 1.5, FENCE_HEIGHT, FENCE_THICKNESS * 1.5);
+      const railHeight = 0.15;
+      // Define rail geometry with length 1 along Z, to be scaled later
+      const baseRailGeometry = new THREE.BoxGeometry(FENCE_THICKNESS, railHeight, 1);
+      // Temporary mesh for transformations
+      const tempMesh = new THREE.Mesh();
+
+      let distanceAlongCurve = 0;
+      let lastPostDist = -FENCE_POST_EVERY; // Ensure first post is placed
+
+      for (let i = 0; i < numFenceSegments; i++) {
+        const p1 = curvePoints[i];
+        const p2 = curvePoints[i + 1] || p1; // Use p1 if it's the last point
+        const segmentLength = p1.distanceTo(p2);
+        if (segmentLength < 0.01) continue; // Skip zero-length segments
+
+        // Use the midpoint and tangent for more stable orientation/positioning
+        const segmentMidpoint = new THREE.Vector3().lerpVectors(p1, p2, 0.5);
+        const tangent = new THREE.Vector3().subVectors(p2, p1).normalize(); // Direction of the segment
+        const normal = new THREE.Vector3(-tangent.z, 0, tangent.x); // Outward normal from road center
+
+        // Calculate fence line positions at the segment midpoint
+        const leftFenceLinePos = new THREE.Vector3().copy(segmentMidpoint).addScaledVector(normal, roadWidth / 2 + FENCE_OFFSET);
+        const rightFenceLinePos = new THREE.Vector3().copy(segmentMidpoint).addScaledVector(normal, -(roadWidth / 2 + FENCE_OFFSET));
+
+        // --- Create Collision Geometry (Invisible Boxes per segment) ---
+        const collisionFenceHeight = FENCE_HEIGHT * 1.5;
+        // Collision box length matches segment length
+        const collisionFenceGeom = new THREE.BoxGeometry(segmentLength, collisionFenceHeight, FENCE_THICKNESS * 2);
+        const collisionMaterial = new THREE.MeshBasicMaterial({visible: false, transparent: true, opacity: 0}); // Invisible
+
+        // Left Collision Fence Segment
+        const leftCollisionMesh = new THREE.Mesh(collisionFenceGeom, collisionMaterial);
+        leftCollisionMesh.position.copy(leftFenceLinePos); // Position at midpoint of fence line segment
+        leftCollisionMesh.position.y = collisionFenceHeight / 2 + ROAD_Y_OFFSET;
+        leftCollisionMesh.lookAt(leftCollisionMesh.position.clone().add(tangent)); // Align with segment direction
+        leftCollisionMesh.userData.normal = normal.clone(); // Store outward normal
+        scene.add(leftCollisionMesh);
+        fences.push(leftCollisionMesh);
+
+        // Right Collision Fence Segment
+        const rightCollisionMesh = new THREE.Mesh(collisionFenceGeom.clone(), collisionMaterial);
+        rightCollisionMesh.position.copy(rightFenceLinePos);
+        rightCollisionMesh.position.y = collisionFenceHeight / 2 + ROAD_Y_OFFSET;
+        rightCollisionMesh.lookAt(rightCollisionMesh.position.clone().add(tangent));
+        rightCollisionMesh.userData.normal = normal.clone().negate(); // Store outward normal
+        scene.add(rightCollisionMesh);
+        fences.push(rightCollisionMesh);
+
+
+        // --- Create Visible Geometry (Posts and Rails) ---
+        const currentDistance = curve.getUtoTmapping(i / numFenceSegments, curve.getLength()); // Get distance at start of segment
+
+        // Place Posts periodically based on distance along the curve
+        if (currentDistance >= lastPostDist + FENCE_POST_EVERY) {
+          const postOffsetY = FENCE_HEIGHT / 2 + ROAD_Y_OFFSET;
+          // Use the starting point of the segment (p1) for post position
+          // Recalculate normal/tangent at p1 for more accurate post placement
+          const postTangent = curve.getTangentAt(i / numFenceSegments).normalize();
+          const postNormal = new THREE.Vector3(-postTangent.z, 0, postTangent.x);
+          const leftPostPos = new THREE.Vector3().copy(p1).addScaledVector(postNormal, roadWidth / 2 + FENCE_OFFSET);
+          const rightPostPos = new THREE.Vector3().copy(p1).addScaledVector(postNormal, -(roadWidth / 2 + FENCE_OFFSET));
+
+          // Left Post
+          const leftPostGeom = postGeometry.clone();
+          leftPostGeom.translate(leftPostPos.x, postOffsetY, leftPostPos.z);
+          leftFenceGeometries.push(leftPostGeom);
+
+          // Right Post
+          const rightPostGeom = postGeometry.clone();
+          rightPostGeom.translate(rightPostPos.x, postOffsetY, rightPostPos.z);
+          rightFenceGeometries.push(rightPostGeom);
+
+          lastPostDist = currentDistance; // Update last post distance
+        }
+
+        // Place Rails for this segment (p1 to p2)
+        if (segmentLength > 0.1) { // Only add rails for segments of reasonable length
+          const railRotation = Math.atan2(-tangent.x, -tangent.z); // Angle relative to negative Z-axis
+
+          const railYPositions = [FENCE_HEIGHT * 0.3, FENCE_HEIGHT * 0.7]; // Two rails
+
+          railYPositions.forEach(railY => {
+            // --- Left Rail ---
+            // Use the temporary mesh to get the world matrix
+            tempMesh.geometry = baseRailGeometry; // Assign base geometry (length 1)
+            tempMesh.scale.set(1, 1, segmentLength); // Scale Z to match segment length
+            tempMesh.rotation.y = railRotation; // Set rotation
+            tempMesh.position.set(leftFenceLinePos.x, railY + ROAD_Y_OFFSET, leftFenceLinePos.z); // Set position at midpoint
+            tempMesh.updateMatrix(); // Calculate the world matrix
+
+            // Clone the base geometry and apply the transformation
+            const finalLeftRailGeom = baseRailGeometry.clone();
+            finalLeftRailGeom.applyMatrix4(tempMesh.matrix);
+            leftFenceGeometries.push(finalLeftRailGeom); // Add transformed geometry
+
+            // --- Right Rail ---
+            // Reuse tempMesh, just update position
+            tempMesh.position.set(rightFenceLinePos.x, railY + ROAD_Y_OFFSET, rightFenceLinePos.z); // Position at midpoint
+            tempMesh.updateMatrix(); // Recalculate matrix with new position
+
+            const finalRightRailGeom = baseRailGeometry.clone();
+            finalRightRailGeom.applyMatrix4(tempMesh.matrix);
+            rightFenceGeometries.push(finalRightRailGeom);
+          });
+        }
+      }
+
+      // --- Merge geometries for rendering performance ---
+      console.log(`Attempting to merge ${leftFenceGeometries.length} left fence geometries.`);
+      if (leftFenceGeometries.length > 0) {
+        try {
+          const mergedLeftFenceGeometry = THREE.BufferGeometryUtils.mergeBufferGeometries(leftFenceGeometries, false);
+          if (mergedLeftFenceGeometry) { // Check if merge was successful
+            const leftFenceMesh = new THREE.Mesh(mergedLeftFenceGeometry, fenceMaterial);
+            leftFenceMesh.castShadow = true;
+            scene.add(leftFenceMesh);
+            console.log("Left fence merged successfully.");
+          } else {
+            console.error("mergeBufferGeometries returned null for left fence.");
+          }
+        } catch (error) {
+          console.error("Error merging left fence geometries:", error);
+        }
+      }
+
+      console.log(`Attempting to merge ${rightFenceGeometries.length} right fence geometries.`);
+      if (rightFenceGeometries.length > 0) {
+        try {
+          const mergedRightFenceGeometry = THREE.BufferGeometryUtils.mergeBufferGeometries(rightFenceGeometries, false);
+          if (mergedRightFenceGeometry) { // Check if merge was successful
+            const rightFenceMesh = new THREE.Mesh(mergedRightFenceGeometry, fenceMaterial);
+            rightFenceMesh.castShadow = true;
+            scene.add(rightFenceMesh);
+            console.log("Right fence merged successfully.");
+          } else {
+            console.error("mergeBufferGeometries returned null for right fence.");
+          }
+        } catch (error) {
+          console.error("Error merging right fence geometries:", error);
+        }
+      }
+
+      console.log(`Fences created. ${fences.length} collision segments.`);
+    }
+
+
+    function createCar() {
+      car = new THREE.Group();
+
+      const bodyGeometry = new THREE.BoxGeometry(2, 1, 4); // width, height, length
+      const bodyMaterial = new THREE.MeshStandardMaterial({color: 0xff0000});
+      carBody = new THREE.Mesh(bodyGeometry, bodyMaterial);
+      carBody.position.y = 0.5; // Position body relative to the group center
+      carBody.castShadow = true;
+      car.add(carBody);
+
+      const wheelGeometry = new THREE.CylinderGeometry(wheelRadius, wheelRadius, 0.4, 24);
+      wheelGeometry.rotateX(Math.PI / 2); // Rotate wheels to stand upright
+      const wheelMaterial = new THREE.MeshStandardMaterial({color: 0x111111});
+      const wheelPositions = [
+        // Front wheels (X, Y, Z relative to car group center)
+        new THREE.Vector3(1.1, 0, 1.5),  // Front right
+        new THREE.Vector3(-1.1, 0, 1.5), // Front left
+        // Rear wheels
+        new THREE.Vector3(1.1, 0, -1.5), // Rear right
+        new THREE.Vector3(-1.1, 0, -1.5) // Rear left
+      ];
+      wheels = [];
+      wheelPositions.forEach(pos => {
+        const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+        // Position wheels relative to the car group center
+        wheel.position.copy(pos);
+        // Ensure wheels are at the correct ground level (Y=0 within the group)
+        wheel.position.y = 0;
+        wheel.castShadow = true;
+        car.add(wheel);
+        wheels.push(wheel);
+      });
+      // Set the entire car group's position in the scene
+      // This will be done in initGame based on the road start
+      scene.add(car);
+      console.log("Car created.");
+    }
+    function createHouse(position) {
+      house = new THREE.Group();
+      const baseGeometry = new THREE.BoxGeometry(6, 4, 5);
+      const baseMaterial = new THREE.MeshStandardMaterial({color: 0x8B4513}); // Brown
+      const base = new THREE.Mesh(baseGeometry, baseMaterial);
+      base.position.y = 2; // Center of base at y=2
+      base.castShadow = true; base.receiveShadow = true;
+      house.add(base);
+      const roofGeometry = new THREE.ConeGeometry(5, 2, 4); // radius, height, segments
+      const roofMaterial = new THREE.MeshStandardMaterial({color: 0xA52A2A}); // Reddish brown
+      const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+      roof.position.y = 4 + 1; // Position roof on top of base (base height/2 + roof height/2)
+      roof.rotation.y = Math.PI / 4; // Rotate roof for pyramid look
+      roof.castShadow = true;
+      house.add(roof);
+      // Position the entire house group
+      house.position.set(position.x, 0, position.z); // Set ground position
+      scene.add(house);
+      console.log("House created at", house.position);
+    }
+    function createCheckpoints(curve, settings) {
+      checkpoints = [];
+      const numCheckpoints = Math.max(1, Math.floor(settings.roadPoints / 2));
+      totalCheckpoints = numCheckpoints;
+      console.log(`Creating ${totalCheckpoints} checkpoints.`);
+
+      const checkpointRadius = 8; // Outer radius of the torus
+      const checkpointTube = 0.6; // Radius of the tube itself
+      const checkpointGeometry = new THREE.TorusGeometry(checkpointRadius, checkpointTube, 8, 30); // Low segments for performance
+      const checkpointMaterial = new THREE.MeshStandardMaterial({
+        color: 0x00ffff, // Cyan
+        transparent: true,
+        opacity: 0.7,
+        side: THREE.DoubleSide // Render both sides
+      });
+
+      for (let i = 1; i <= numCheckpoints; i++) {
+        const t = i / (numCheckpoints + 1); // Distribute checkpoints along the curve (excluding start/end)
+        try {
+          const point = curve.getPointAt(t);
+          const tangent = curve.getTangentAt(t).normalize();
+
+          const checkpoint = new THREE.Mesh(checkpointGeometry, checkpointMaterial.clone()); // Clone material
+
+          // Position the checkpoint above the road
+          checkpoint.position.set(point.x, point.y + checkpointRadius * 0.75, point.z); // Raise slightly
+
+          // Orient the checkpoint to face along the road tangent
+          const up = new THREE.Vector3(0, 1, 0);
+          checkpoint.quaternion.setFromUnitVectors(up, tangent); // Align default up (Y) with tangent
+          checkpoint.rotateX(Math.PI / 2); // Rotate torus to be upright relative to road
+
+          checkpoint.userData = {index: i - 1, active: true}; // Store index and state
+          checkpoint.castShadow = false; // Checkpoints don't cast shadows
+          scene.add(checkpoint);
+          checkpoints.push(checkpoint);
+        } catch (error) {console.error(`Error creating checkpoint ${i} at t=${t}:`, error);}
+      }
+      updateCheckpointUI();
+    }
+    function createObstacles(count) {
+      obstacles = [];
+      const obstacleGeometry = new THREE.BoxGeometry(1.5, 1.5, 1.5);
+      const obstacleMaterial = new THREE.MeshStandardMaterial({color: 0x808080}); // Grey
+      for (let i = 0; i < count; i++) {
+        const obstacle = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
+        // Place obstacles somewhat near the road area
+        const x = (Math.random() - 0.5) * 50; // Reduced spread compared to ground size
+        const z = Math.random() * 120 + 20; // Place ahead of the start
+        obstacle.position.set(x, 0.75, z); // Position on the ground (geometry height/2)
+        obstacle.castShadow = true; obstacle.receiveShadow = true;
+        scene.add(obstacle); obstacles.push(obstacle);
+      }
+      console.log(`Created ${count} obstacles.`);
+    }
+    function createHearts(count) {
+      hearts = [];
+      // Create heart shape
+      const heartShape = new THREE.Shape();
+      const x = 0, y = 0;
+      heartShape.moveTo(x + 0.25, y + 0.25);
+      heartShape.bezierCurveTo(x + 0.25, y + 0.25, x + 0.2, y, x, y);
+      heartShape.bezierCurveTo(x - 0.3, y, x - 0.3, y + 0.35, x - 0.3, y + 0.35);
+      heartShape.bezierCurveTo(x - 0.3, y + 0.55, x - 0.1, y + 0.77, x + 0.25, y + 0.95);
+      heartShape.bezierCurveTo(x + 0.6, y + 0.77, x + 0.8, y + 0.55, x + 0.8, y + 0.35);
+      heartShape.bezierCurveTo(x + 0.8, y + 0.35, x + 0.8, y, x + 0.5, y);
+      heartShape.bezierCurveTo(x + 0.35, y, x + 0.25, y + 0.25, x + 0.25, y + 0.25);
+
+      const extrudeSettings = {depth: 0.1, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.05, bevelOffset: 0, bevelSegments: 1};
+      const heartGeometry = new THREE.ExtrudeGeometry(heartShape, extrudeSettings);
+      heartGeometry.center(); // Center the geometry
+      heartGeometry.rotateX(Math.PI); // Rotate to face up
+      heartGeometry.scale(0.8, 0.8, 0.8); // Scale it down a bit
+
+      const heartMaterial = new THREE.MeshStandardMaterial({color: 0xff69b4, emissive: 0x550000}); // Pinkish with slight glow
+
+      for (let i = 0; i < count; i++) {
+        const heart = new THREE.Mesh(heartGeometry, heartMaterial);
+        // Place hearts somewhat near the road
+        const hx = (Math.random() - 0.5) * 40; // Reduced spread
+        const hz = Math.random() * 100 + 25; // Place ahead of start
+        heart.position.set(hx, 0.7, hz); // Position slightly above ground
+        heart.castShadow = true;
+        heart.userData.rotationSpeed = (Math.random() - 0.5) * 0.02; // Random rotation speed
+        scene.add(heart); hearts.push(heart);
+      }
+      console.log(`Created ${count} hearts.`);
+    }
+
+    // --- Event Listeners ---
+    function setupEventListeners() {
+      // Remove previous listeners to avoid duplicates
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('resize', onWindowResize);
+      window.removeEventListener('deviceorientation', handleDeviceOrientation);
+      window.removeEventListener('gamepadconnected', handleGamepadConnect);
+      window.removeEventListener('gamepaddisconnected', handleGamepadDisconnect);
+      gasButton.removeEventListener('touchstart', handleGasTouchStart);
+      gasButton.removeEventListener('touchend', handleGasTouchEnd);
+      gasButton.removeEventListener('touchcancel', handleGasTouchEnd);
+      brakeButton.removeEventListener('touchstart', handleBrakeTouchStart);
+      brakeButton.removeEventListener('touchend', handleBrakeTouchEnd);
+      brakeButton.removeEventListener('touchcancel', handleBrakeTouchEnd);
+
+
+      // Add new listeners
+      window.addEventListener('keydown', handleKeyDown);
+      window.addEventListener('keyup', handleKeyUp);
+      window.addEventListener('resize', onWindowResize);
+
+      // Gamepad listeners (always active)
+      window.addEventListener('gamepadconnected', handleGamepadConnect);
+      window.addEventListener('gamepaddisconnected', handleGamepadDisconnect);
+
+      // Device Orientation listener (only if touch device)
+      if (isTouchDevice) {
+        window.addEventListener('deviceorientation', handleDeviceOrientation, true); // Use capture phase
+        // Touch button listeners
+        gasButton.addEventListener('touchstart', handleGasTouchStart, {passive: false});
+        gasButton.addEventListener('touchend', handleGasTouchEnd, {passive: false});
+        gasButton.addEventListener('touchcancel', handleGasTouchEnd, {passive: false});
+        brakeButton.addEventListener('touchstart', handleBrakeTouchStart, {passive: false});
+        brakeButton.addEventListener('touchend', handleBrakeTouchEnd, {passive: false});
+        brakeButton.addEventListener('touchcancel', handleBrakeTouchEnd, {passive: false});
+      }
+
+      console.log("Event listeners setup.");
+    }
+
+    // Input Handlers
+    function handleKeyDown(event) {keys[event.code] = true;}
+    function handleKeyUp(event) {keys[event.code] = false;}
+    function onWindowResize() {
+      if (!camera || !renderer) return;
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      console.log("Window resized.");
+    }
+    function handleDeviceOrientation(event) {
+      if (event.gamma !== null) {
+        tiltGamma = event.gamma; // Store gamma value (-90 to 90)
+      }
+    }
+    function handleGamepadConnect(event) {
+      console.log('Gamepad connected:', event.gamepad.id);
+      gamepad = event.gamepad; // Store the connected gamepad
+      gamepadButtons = {}; gamepadAxes = {}; previousGamepadButtons = {}; // Reset states
+    }
+    function handleGamepadDisconnect(event) {
+      console.log('Gamepad disconnected:', event.gamepad.id);
+      if (gamepad && gamepad.index === event.gamepad.index) {
+        gamepad = null; // Clear gamepad if the active one disconnected
+        gamepadButtons = {}; gamepadAxes = {}; previousGamepadButtons = {};
+      }
+    }
+    function handleGasTouchStart(event) {event.preventDefault(); touchGas = true;}
+    function handleGasTouchEnd(event) {event.preventDefault(); touchGas = false;}
+    function handleBrakeTouchStart(event) {event.preventDefault(); touchBrake = true;}
+    function handleBrakeTouchEnd(event) {event.preventDefault(); touchBrake = false;}
+
+    // --- Gamepad State Update ---
+    function updateGamepadState() {
+      if (!gamepad) return; // No gamepad connected
+      previousGamepadButtons = {...gamepadButtons}; // Store previous state
+
+      // Update current state
+      gamepadButtons = {};
+      gamepad.buttons.forEach((button, index) => {
+        gamepadButtons[index] = button.pressed;
+      });
+      gamepadAxes = {};
+      gamepad.axes.forEach((axis, index) => {
+        gamepadAxes[index] = axis;
+      });
+    }
+
+    // Helper to check if a button was just pressed this frame
+    function wasButtonPressed(buttonIndex) {
+      return gamepadButtons[buttonIndex] && !previousGamepadButtons[buttonIndex];
+    }
+
+    // --- Game Logic ---
+
+    // Handles input specifically for the difficulty selection screen
+    function processDifficultyInput() {
+      if (!gamepad) return;
+
+      let moved = false;
+      const stickY = gamepadAxes[GAMEPAD_AXIS_LEFT_Y] || 0;
+      const prevStickY = previousGamepadAxes[GAMEPAD_AXIS_LEFT_Y] || 0;
+
+      // D-pad Up / Left Stick Up (Check for transition past deadzone)
+      if (wasButtonPressed(GAMEPAD_BUTTON_DPAD_UP) || (stickY < -GAMEPAD_AXIS_DEADZONE && prevStickY >= -GAMEPAD_AXIS_DEADZONE)) {
+        selectedDifficultyIndex = (selectedDifficultyIndex - 1 + difficultyButtons.length) % difficultyButtons.length;
+        moved = true;
+      }
+      // D-pad Down / Left Stick Down (Check for transition past deadzone)
+      else if (wasButtonPressed(GAMEPAD_BUTTON_DPAD_DOWN) || (stickY > GAMEPAD_AXIS_DEADZONE && prevStickY <= GAMEPAD_AXIS_DEADZONE)) {
+        selectedDifficultyIndex = (selectedDifficultyIndex + 1) % difficultyButtons.length;
+        moved = true;
+      }
+
+      if (moved) {
+        updateDifficultySelectionVisuals();
+      }
+
+      // Select Button (A)
+      if (wasButtonPressed(GAMEPAD_BUTTON_A)) {
+        const selectedButton = difficultyButtons[selectedDifficultyIndex];
+        if (selectedButton) {
+          const difficulty = selectedButton.getAttribute('data-difficulty');
+          startSelectedGame(difficulty);
+        }
+      }
+    }
+
+    // Updates which difficulty button has the 'selected' class
+    function updateDifficultySelectionVisuals() {
+      difficultyButtons.forEach((button, index) => {
+        button.classList.toggle('selected', index === selectedDifficultyIndex);
+      });
+    }
+
+
+    // Processes input during active gameplay
+    function processGameplayInput() {
+      let steerInput = 0;
+      let accelInput = 0;
+      let brakeInput = 0;
+
+      // 1. Gamepad Input (Highest Priority)
+      if (gamepad) {
+        const stickX = gamepadAxes[0] || 0;
+        if (Math.abs(stickX) > GAMEPAD_DEADZONE) {
+          steerInput = -stickX;
+        } else {
+          if (gamepadButtons[GAMEPAD_BUTTON_DPAD_LEFT]) steerInput = 1.0;
+          if (gamepadButtons[GAMEPAD_BUTTON_DPAD_RIGHT]) steerInput = -1.0;
+        }
+
+        const rightTrigger = gamepad.buttons[7]; // RT
+        if (rightTrigger) accelInput = rightTrigger.value;
+        const leftTrigger = gamepad.buttons[6]; // LT
+        if (leftTrigger) brakeInput = leftTrigger.value;
+
+        // Restart Button (Start)
+        if (wasButtonPressed(GAMEPAD_BUTTON_START)) {
+          handleRestartClick();
+          return null; // Stop further processing
+        }
+      }
+
+      // 2. Tilt Input (If no gamepad steering, and on touch device)
+      if (steerInput === 0 && isTouchDevice && tiltGamma !== 0) {
+        const clampedGamma = Math.max(-45, Math.min(45, tiltGamma));
+        steerInput = -(clampedGamma / 45.0);
+      }
+
+      // 3. Touch Button Input (If no gamepad accel/brake, and on touch device)
+      if (accelInput < 0.1 && brakeInput < 0.1 && isTouchDevice) {
+        if (touchGas) accelInput = 1.0;
+        if (touchBrake) brakeInput = 1.0;
+      }
+
+
+      // 4. Keyboard Input (Lowest Priority)
+      if (steerInput === 0) {
+        if (keys['ArrowLeft'] || keys['KeyA']) steerInput = 1.0;
+        if (keys['ArrowRight'] || keys['KeyD']) steerInput = -1.0;
+      }
+      if (accelInput < 0.1 && brakeInput < 0.1) {
+        if (keys['ArrowUp'] || keys['KeyW']) accelInput = 1.0;
+        if (keys['ArrowDown'] || keys['KeyS']) brakeInput = 1.0;
+      }
+
+      return {steer: steerInput, accel: accelInput, brake: brakeInput};
+    }
+
+    // Processes input on the Game Over screen
+    function processGameOverInput() {
+      if (!gamepad) return;
+      // Restart Button (Start or A)
+      if (wasButtonPressed(GAMEPAD_BUTTON_START) || wasButtonPressed(GAMEPAD_BUTTON_A)) {
+        handleRestartClick();
+      }
+    }
+
+
+    function updateCarMovement() {
+      if (!gameActive || !car) return;
+
+      const input = processGameplayInput();
+      if (!input) return; // Input handler might return null if restarting
+
+      // Performance based on damage
+      const healthFactor = Math.max(0.1, carHealth / MAX_HEALTH);
+      const currentMaxSpeed = baseMaxSpeed * (0.5 + healthFactor * 0.5);
+      const currentAcceleration = baseAcceleration * (0.3 + healthFactor * 0.7);
+      const currentSteeringSensitivity = baseSteeringSensitivity;
+      const currentBraking = baseBraking * (0.5 + healthFactor * 0.5);
+
+      // Apply acceleration/braking
+      velocity += input.accel * currentAcceleration;
+      velocity -= input.brake * currentBraking;
+
+      // Apply friction
+      velocity *= friction;
+
+      // Clamp velocity
+      velocity = Math.max(-currentMaxSpeed / 2, Math.min(currentMaxSpeed, velocity));
+
+      // Apply steering smoothly
+      const targetSteeringAngle = input.steer * maxSteerAngle;
+      steeringAngle += (targetSteeringAngle - steeringAngle) * 0.3; // Interpolation factor
+
+      // Update Car Rotation (Yaw) only if moving significantly
+      if (Math.abs(velocity) > 0.01) {
+        const turnRate = steeringAngle * Math.sign(velocity) * 0.05; // Adjust multiplier for sensitivity
+        car.rotation.y += turnRate;
+      }
+
+      // Update Position based on forward vector
+      const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(car.quaternion);
+      car.position.addScaledVector(forward, velocity);
+      car.position.y = wheelRadius + ROAD_Y_OFFSET; // Keep car on road level
+
+      // Wheel rotation
+      const wheelRotation = velocity / wheelRadius;
+      wheels.forEach((wheel, index) => {
+        wheel.rotation.z -= wheelRotation; // Forward/backward rotation (around Z in local space)
+        // Apply steering rotation smoothly to front wheels (around Y in local space)
+        if (index < 2) { // Front wheels
+          wheel.rotation.y += (steeringAngle - wheel.rotation.y) * 0.4;
+        } else { // Rear wheels straighten out
+          wheel.rotation.y *= 0.9;
+        }
+      });
+
+      updateCameraPosition();
+    }
+
+    function updateCameraPosition() {
+      if (!camera || !car) return; // Check if camera exists
+      const offset = new THREE.Vector3(0, 6, -14); // Camera distance and height
+      offset.applyQuaternion(car.quaternion); // Apply car's rotation to offset
+      camera.position.copy(car.position).add(offset);
+
+      // Look slightly ahead of the car
+      const lookAtOffset = new THREE.Vector3(0, 2.0, 5.0); // Look ahead distance
+      lookAtOffset.applyQuaternion(car.quaternion);
+      const lookAtPos = new THREE.Vector3().copy(car.position).add(lookAtOffset);
+
+      camera.lookAt(lookAtPos);
+    }
+
+    function checkCollisions() {
+      if (!gameActive || !car || !carBody) return;
+
+      // Update car's world matrix if needed (important for accurate Box3)
+      car.updateMatrixWorld();
+      // Create Box3 from the carBody mesh in world space
+      const carBox = new THREE.Box3().setFromObject(carBody, true); // Use true for precise calculation
+
+      // House collision (End Goal)
+      if (house) {
+        const houseBox = new THREE.Box3().setFromObject(house);
+        if (carBox.intersectsBox(houseBox)) {
+          if (nextCheckpointIndex === totalCheckpoints) {
+            endGame(true); // Win condition
+          }
+        }
+      }
+
+      // Checkpoint collision
+      if (checkpoints && nextCheckpointIndex < checkpoints.length) {
+        const targetCheckpoint = checkpoints[nextCheckpointIndex];
+        if (targetCheckpoint && targetCheckpoint.userData.active) {
+          const distanceToCheckpoint = car.position.distanceTo(targetCheckpoint.position);
+          if (distanceToCheckpoint < (targetCheckpoint.geometry.parameters.radius + 1.5)) {
+            hitCheckpoint(targetCheckpoint);
+          }
+        }
+      }
+
+      // Obstacle collision
+      obstacles.forEach(obstacle => {
+        if (!obstacle.parent) return; // Skip if already removed
+        const obstacleBox = new THREE.Box3().setFromObject(obstacle);
+        if (carBox.intersectsBox(obstacleBox)) {
+          takeDamage(OBSTACLE_DAMAGE);
+          // Bounce effect
+          velocity *= -0.3; // Bounce back
+          const direction = new THREE.Vector3().subVectors(car.position, obstacle.position).normalize();
+          direction.y = 0; // Keep bounce horizontal
+          car.position.addScaledVector(direction, 0.5); // Push car back slightly
+        }
+      });
+
+      // Fence collision
+      fences.forEach(fenceSegment => {
+        if (!fenceSegment.parent) return; // Skip removed/invisible segments
+        // Update fence segment's world matrix (important for Box3)
+        fenceSegment.updateMatrixWorld();
+        const fenceBox = new THREE.Box3().setFromObject(fenceSegment, true); // Precise box
+
+        if (carBox.intersectsBox(fenceBox)) {
+          // console.log("Fence collision!"); // Reduce console spam
+          velocity = 0; // Stop the car immediately
+
+          // Push the car slightly back TOWARDS the road (opposite of the fence normal)
+          const pushDirection = fenceSegment.userData.normal.clone().negate(); // <-- Negate the normal here!
+          pushDirection.y = 0; // Ensure push is horizontal
+          pushDirection.normalize();
+
+          car.position.addScaledVector(pushDirection, 0.1); // Push in the negated (inward) direction
+
+          // Optional: Dampen steering to prevent sticking
+          // steeringAngle *= 0.5;
+        }
+      });
+
+
+      // Heart collision
+      hearts.slice().forEach((heart) => { // Use slice for safe removal
+        if (!heart.parent) return;
+        const heartBox = new THREE.Box3().setFromObject(heart);
+        heartBox.expandByScalar(0.3); // Make hitbox slightly larger
+        if (carBox.intersectsBox(heartBox)) {
+          collectHeart(heart);
+        }
+      });
+    }
+
+    function hitCheckpoint(checkpoint) {
+      if (!gameActive || !checkpoint || !checkpoint.userData.active) return;
+      console.log(`Checkpoint ${checkpoint.userData.index + 1} hit!`);
+      checkpoint.userData.active = false;
+      checkpoint.material.color.setHex(0x00ff00); // Green
+      checkpoint.material.opacity = 0.3;
+
+      nextCheckpointIndex++;
+      timeLeft += CHECKPOINT_TIME_BONUS;
+      updateCheckpointUI();
+      updateTimerUI();
+
+      if (nextCheckpointIndex === totalCheckpoints) {
+        console.log("All checkpoints passed! Head to the house!");
+      }
+    }
+
+    function takeDamage(amount) {
+      if (!gameActive) return;
+      carHealth -= amount;
+      carHealth = Math.max(0, carHealth); // Clamp at 0
+      console.log(`Damage taken, health: ${carHealth}`);
+      updateDamageUI(); // Updates UI and car color
+
+      // Visual feedback: Flash effect
+      if (carBody && carBody.material) {
+        carBody.material.color.setHex(0xffffff); // Flash white
+        carBody.material.emissive.setHex(0x555555); // Glow
+        setTimeout(() => {
+          if (carBody && carBody.material) {
+            updateDamageUI(); // Restore color based on health
+            carBody.material.emissive.setHex(0x000000); // Turn off glow
+          }
+        }, 150); // Flash duration
+      }
+
+      if (carHealth <= 0) {
+        endGame(false, "Your car is too damaged!");
+      }
+    }
+
+    function collectHeart(heart) {
+      if (!gameActive || !heart || !heart.parent) return;
+      carHealth += HEART_REPAIR;
+      carHealth = Math.min(MAX_HEALTH, carHealth); // Clamp at max health
+      console.log(`Heart collected, health: ${carHealth}`);
+      updateDamageUI(); // Update UI and car color
+
+      scene.remove(heart);
+      const index = hearts.indexOf(heart);
+      if (index > -1) hearts.splice(index, 1);
+    }
+
+    // --- UI Update Functions ---
+    function startTimer() {
+      clearInterval(timerInterval); // Clear any existing timer
+      timerInterval = setInterval(() => {
+        if (!gameActive) {clearInterval(timerInterval); return;}
+        timeLeft--;
+        updateTimerUI();
+        if (timeLeft <= 0) {
+          timeLeft = 0; updateTimerUI();
+          endGame(false, "Time's up!");
+        }
+      }, 1000);
+    }
+    function updateTimerUI() {timeSpan.textContent = Math.max(0, timeLeft);}
+    function updateDamageUI() {
+      const damagePercent = Math.max(0, 100 - carHealth);
+      damageSpan.textContent = `${damagePercent.toFixed(0)}%`;
+
+      if (carBody && carBody.material) {
+        const healthRatio = carHealth / MAX_HEALTH;
+        const red = 1.0;
+        const greenBlue = healthRatio * 0.8; // Less green/blue when damaged
+        carBody.material.color.setRGB(red, greenBlue, greenBlue);
+        carBody.userData.originalColor = carBody.material.color.getHex();
+      }
+    }
+    function updateCheckpointUI() {
+      checkpointsPassedSpan.textContent = nextCheckpointIndex;
+      checkpointsTotalSpan.textContent = totalCheckpoints;
+    }
+
+    // --- Game End and Cleanup ---
+    function endGame(isWin, message = "") {
+      if (!gameActive && currentScreen === 'gameOver') return; // Prevent multiple calls
+
+      console.log(`Game ended. Win: ${isWin}, Message: ${message}`);
+      gameActive = false; // Stop game logic updates
+      currentScreen = 'gameOver'; // Set screen state
+      clearInterval(timerInterval); timerInterval = null;
+      velocity = 0; // Stop car movement
+
+      if (isWin) {
+        messageTextP.textContent = "You reached the house! YOU WIN!";
+        messageBoxDiv.style.backgroundColor = 'rgba(0, 150, 0, 0.8)'; // Green
+      } else {
+        if (!message && carHealth <= 0) message = "Car destroyed!";
+        else if (!message && timeLeft <= 0) message = "Time's up!";
+        else if (!message) message = "Try again!";
+        messageTextP.textContent = `GAME OVER! ${message}`;
+        messageBoxDiv.style.backgroundColor = 'rgba(150, 0, 0, 0.8)'; // Red
+      }
+      messageBoxDiv.style.display = 'block'; // Show message box
+
+      // Hide in-game UI
+      uiContainerDiv.style.display = 'none';
+      controlsInfoDiv.style.display = 'none';
+      touchControlsDiv.style.display = 'none';
+    }
+
+    function cleanupGame() {
+      console.log("Cleaning up previous game instance...");
+      gameActive = false;
+
+      if (timerInterval) {clearInterval(timerInterval); timerInterval = null;}
+
+      // Remove specific listeners
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('deviceorientation', handleDeviceOrientation, true);
+      gasButton.removeEventListener('touchstart', handleGasTouchStart);
+      gasButton.removeEventListener('touchend', handleGasTouchEnd);
+      gasButton.removeEventListener('touchcancel', handleGasTouchEnd);
+      brakeButton.removeEventListener('touchstart', handleBrakeTouchStart);
+      brakeButton.removeEventListener('touchend', handleBrakeTouchEnd);
+      brakeButton.removeEventListener('touchcancel', handleBrakeTouchEnd);
+
+
+      if (scene) {
+        // Dispose of geometries, materials, textures
+        const objectsToRemove = [];
+        scene.traverse(object => {
+          objectsToRemove.push(object); // Collect all objects
+          if (object.isMesh) {
+            if (object.geometry) object.geometry.dispose();
+            if (object.material) {
+              // Dispose materials and textures
+              const materials = Array.isArray(object.material) ? object.material : [object.material];
+              materials.forEach(material => {
+                Object.keys(material).forEach(key => {
+                  const value = material[key];
+                  if (value && typeof value === 'object' && typeof value.dispose === 'function') {
+                    value.dispose();
+                  }
+                });
+                material.dispose();
+              });
+            }
+          }
+        });
+        // Remove objects from scene starting from children
+        objectsToRemove.reverse().forEach(object => {
+          if (object.parent) {
+            object.parent.remove(object);
+          }
+        });
+        console.log("Scene objects disposed and removed.");
+      }
+      if (renderer) {
+        renderer.dispose(); // Dispose WebGL context
+        if (renderer.domElement.parentNode) {
+          renderer.domElement.parentNode.removeChild(renderer.domElement); // Remove canvas
+        }
+        renderer = null;
+        console.log("Renderer disposed and canvas removed.");
+      }
+
+      // Clear references
+      scene = null; camera = null; car = null; carBody = null; house = null;
+      ground = null; roadMesh = null; wheels = []; obstacles = []; hearts = []; checkpoints = []; fences = []; // Clear fences
+      keys = {}; tiltGamma = 0; touchGas = false; touchBrake = false;
+
+      console.log("Cleanup complete.");
+    }
+
+    // --- Animation Loop (Handles all states) ---
+    let previousGamepadAxes = {}; // Track previous axis state for menu navigation
+    function animate() {
+      animationFrameId = requestAnimationFrame(animate); // Keep the loop running
+
+      // 1. Update Gamepad State
+      if (navigator.getGamepads) {
+        const gamepads = navigator.getGamepads();
+        if (gamepads[0] && !gamepad) {handleGamepadConnect({gamepad: gamepads[0]});}
+        else if (gamepad && !gamepads[gamepad.index]) {handleGamepadDisconnect({gamepad: gamepad});}
+        if (gamepad) {updateGamepadState();}
+      }
+
+      // 2. Process Input based on Current Screen
+      switch (currentScreen) {
+        case 'difficulty':
+          processDifficultyInput();
+          break;
+        case 'game':
+          if (gameActive) {
+            updateCarMovement(); // Handles input internally
+            checkCollisions();
+            // Animate hearts
+            hearts.forEach(heart => {
+              if (heart.parent) {
+                heart.rotation.y += heart.userData.rotationSpeed || 0.01;
+              }
+            });
+          }
+          break;
+        case 'gameOver':
+          processGameOverInput();
+          break;
+      }
+
+
+      // 3. Render Scene (only if in 'game' state and renderer exists)
+      if (currentScreen === 'game' && renderer && scene && camera) {
+        try {
+          renderer.render(scene, camera);
+        } catch (error) {
+          console.error("Error during rendering:", error);
+          endGame(false, "Rendering Error"); // Handle potential render crash
+        }
+      }
+
+      // Store current axes state for next frame's comparison (menu navigation)
+      previousGamepadAxes = {...gamepadAxes};
+    }
+
+    // --- Start Setup ---
+    window.onload = () => {
+      console.log("Window loaded. Setting up initial state.");
+      setupInitialScreen(); // Show difficulty selection first
+    };
+
+  </script>
+</body>
+
+</html>
