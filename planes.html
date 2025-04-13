@@ -255,9 +255,10 @@
     let keys = {}; // Keyboard state
 
     // Input State
-    let gamepad = null; // Store active gamepad
-    let gamepadButtons = {}; // Store current gamepad button states
-    let gamepadAxes = {}; // Store current gamepad axes states
+    let gamepad = null; // Store REFERENCE to the active gamepad object (may become stale in Chrome)
+    let gamepadIndex = null; // Store index of the active gamepad
+    let gamepadButtons = {}; // Store current gamepad button states (read fresh each frame)
+    let gamepadAxes = {}; // Store current gamepad axes states (read fresh each frame)
     let previousGamepadButtons = {}; // Store previous frame's button states
     let tiltGamma = 0; // Store device orientation gamma (left/right tilt)
     let touchGas = false; // State for touch gas button
@@ -423,6 +424,7 @@
         nextCheckpointIndex = 0; totalCheckpoints = 0;
         obstacles = []; hearts = []; checkpoints = []; fences = []; // Reset fences
         keys = {};
+        // Don't reset gamepad/gamepadIndex here, keep connection if already established
         tiltGamma = 0; touchGas = false; touchBrake = false;
         gameActive = false; // Set to true after setup
 
@@ -502,7 +504,7 @@
       scene.add(directionalLight);
     }
 
-    // --- Object Creation Functions ---
+    // --- Object Creation Functions (Unchanged from previous version) ---
     function createGround() {
       const groundSize = 300;
       const groundGeometry = new THREE.PlaneGeometry(groundSize, groundSize);
@@ -511,10 +513,10 @@
       ground.rotation.x = -Math.PI / 2;
       ground.receiveShadow = true;
       scene.add(ground);
-      console.log("Ground created.");
+      // console.log("Ground created."); // Reduce console noise
     }
     function createRoad(settings) {
-      console.log("Creating road...");
+      // console.log("Creating road..."); // Reduce console noise
       const roadWidth = ACTUAL_ROAD_WIDTH;
       const roadSegments = settings.roadPoints * 10; // More segments for smoother curve
 
@@ -577,12 +579,11 @@
       roadMesh.castShadow = false; // Road itself doesn't cast significant shadows
       scene.add(roadMesh);
 
-      console.log("Road created successfully.");
+      // console.log("Road created successfully."); // Reduce console noise
       return curve; // Return the curve for fence placement
     }
-
     function createFences(curve, roadWidth) {
-      console.log("Creating fences...");
+      // console.log("Creating fences..."); // Reduce console noise
       if (typeof THREE.BufferGeometryUtils === 'undefined') {
         console.error("THREE.BufferGeometryUtils is not loaded. Cannot merge fence geometries.");
         return; // Stop execution if the utility is missing
@@ -707,7 +708,7 @@
       }
 
       // --- Merge geometries for rendering performance ---
-      console.log(`Attempting to merge ${leftFenceGeometries.length} left fence geometries.`);
+      // console.log(`Attempting to merge ${leftFenceGeometries.length} left fence geometries.`); // Reduce console noise
       if (leftFenceGeometries.length > 0) {
         try {
           const mergedLeftFenceGeometry = THREE.BufferGeometryUtils.mergeBufferGeometries(leftFenceGeometries, false);
@@ -715,7 +716,7 @@
             const leftFenceMesh = new THREE.Mesh(mergedLeftFenceGeometry, fenceMaterial);
             leftFenceMesh.castShadow = true;
             scene.add(leftFenceMesh);
-            console.log("Left fence merged successfully.");
+            // console.log("Left fence merged successfully."); // Reduce console noise
           } else {
             console.error("mergeBufferGeometries returned null for left fence.");
           }
@@ -724,7 +725,7 @@
         }
       }
 
-      console.log(`Attempting to merge ${rightFenceGeometries.length} right fence geometries.`);
+      // console.log(`Attempting to merge ${rightFenceGeometries.length} right fence geometries.`); // Reduce console noise
       if (rightFenceGeometries.length > 0) {
         try {
           const mergedRightFenceGeometry = THREE.BufferGeometryUtils.mergeBufferGeometries(rightFenceGeometries, false);
@@ -732,7 +733,7 @@
             const rightFenceMesh = new THREE.Mesh(mergedRightFenceGeometry, fenceMaterial);
             rightFenceMesh.castShadow = true;
             scene.add(rightFenceMesh);
-            console.log("Right fence merged successfully.");
+            // console.log("Right fence merged successfully."); // Reduce console noise
           } else {
             console.error("mergeBufferGeometries returned null for right fence.");
           }
@@ -741,10 +742,8 @@
         }
       }
 
-      console.log(`Fences created. ${fences.length} collision segments.`);
+      // console.log(`Fences created. ${fences.length} collision segments.`); // Reduce console noise
     }
-
-
     function createCar() {
       car = new THREE.Group();
 
@@ -780,7 +779,7 @@
       // Set the entire car group's position in the scene
       // This will be done in initGame based on the road start
       scene.add(car);
-      console.log("Car created.");
+      // console.log("Car created."); // Reduce console noise
     }
     function createHouse(position) {
       house = new THREE.Group();
@@ -800,13 +799,13 @@
       // Position the entire house group
       house.position.set(position.x, 0, position.z); // Set ground position
       scene.add(house);
-      console.log("House created at", house.position);
+      // console.log("House created at", house.position); // Reduce console noise
     }
     function createCheckpoints(curve, settings) {
       checkpoints = [];
       const numCheckpoints = Math.max(1, Math.floor(settings.roadPoints / 2));
       totalCheckpoints = numCheckpoints;
-      console.log(`Creating ${totalCheckpoints} checkpoints.`);
+      // console.log(`Creating ${totalCheckpoints} checkpoints.`); // Reduce console noise
 
       const checkpointRadius = 8; // Outer radius of the torus
       const checkpointTube = 0.6; // Radius of the tube itself
@@ -855,7 +854,7 @@
         obstacle.castShadow = true; obstacle.receiveShadow = true;
         scene.add(obstacle); obstacles.push(obstacle);
       }
-      console.log(`Created ${count} obstacles.`);
+      // console.log(`Created ${count} obstacles.`); // Reduce console noise
     }
     function createHearts(count) {
       hearts = [];
@@ -888,7 +887,7 @@
         heart.userData.rotationSpeed = (Math.random() - 0.5) * 0.02; // Random rotation speed
         scene.add(heart); hearts.push(heart);
       }
-      console.log(`Created ${count} hearts.`);
+      // console.log(`Created ${count} hearts.`); // Reduce console noise
     }
 
     // --- Event Listeners ---
@@ -929,7 +928,7 @@
         brakeButton.addEventListener('touchcancel', handleBrakeTouchEnd, {passive: false});
       }
 
-      console.log("Event listeners setup.");
+      // console.log("Event listeners setup."); // Reduce console noise
     }
 
     // Input Handlers
@@ -940,7 +939,7 @@
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
-      console.log("Window resized.");
+      // console.log("Window resized."); // Reduce console noise
     }
     function handleDeviceOrientation(event) {
       if (event.gamma !== null) {
@@ -948,14 +947,20 @@
       }
     }
     function handleGamepadConnect(event) {
-      console.log('Gamepad connected:', event.gamepad.id);
-      gamepad = event.gamepad; // Store the connected gamepad
-      gamepadButtons = {}; gamepadAxes = {}; previousGamepadButtons = {}; // Reset states
+      console.log('Gamepad connected:', event.gamepad.id, 'Index:', event.gamepad.index);
+      // Only take the first connected gamepad for simplicity
+      if (gamepadIndex === null) {
+        gamepad = event.gamepad; // Store reference (might be stale later)
+        gamepadIndex = event.gamepad.index; // Store the index
+        gamepadButtons = {}; gamepadAxes = {}; previousGamepadButtons = {}; // Reset states
+      }
     }
     function handleGamepadDisconnect(event) {
-      console.log('Gamepad disconnected:', event.gamepad.id);
-      if (gamepad && gamepad.index === event.gamepad.index) {
-        gamepad = null; // Clear gamepad if the active one disconnected
+      console.log('Gamepad disconnected:', event.gamepad.id, 'Index:', event.gamepad.index);
+      // If the disconnected gamepad is the one we are using
+      if (gamepadIndex === event.gamepad.index) {
+        gamepad = null;
+        gamepadIndex = null;
         gamepadButtons = {}; gamepadAxes = {}; previousGamepadButtons = {};
       }
     }
@@ -966,36 +971,74 @@
 
     // --- Gamepad State Update ---
     function updateGamepadState() {
-      if (!gamepad) return; // No gamepad connected
+      // Always poll for the latest gamepad states
+      const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+
+      // Find the currently active gamepad using its stored index
+      let latestGamepadState = null;
+      if (gamepadIndex !== null && gamepads[gamepadIndex]) {
+        latestGamepadState = gamepads[gamepadIndex];
+      } else if (gamepadIndex !== null) {
+        // The gamepad at our stored index is gone, handle disconnect
+        console.log('Gamepad at index', gamepadIndex, 'seems disconnected during poll.');
+        handleGamepadDisconnect({gamepad: {index: gamepadIndex, id: "Unknown (disconnected)"}}); // Simulate disconnect
+        return; // Stop processing for this frame
+      } else {
+        // We don't have an active gamepad index, try to find the first connected one
+        for (let i = 0; i < gamepads.length; i++) {
+          if (gamepads[i]) {
+            console.log('Found new gamepad during poll, connecting...');
+            handleGamepadConnect({gamepad: gamepads[i]}); // Connect to the first one found
+            latestGamepadState = gamepads[i]; // Use this one for the current frame
+            break;
+          }
+        }
+      }
+
+      // If no gamepad is active after polling, clear states and exit
+      if (!latestGamepadState) {
+        gamepadButtons = {};
+        gamepadAxes = {};
+        return;
+      }
+
+      // --- Read fresh state from the latestGamepadState ---
       previousGamepadButtons = {...gamepadButtons}; // Store previous state
 
-      // Update current state
+      // Update current state using the LATEST object's data
       gamepadButtons = {};
-      gamepad.buttons.forEach((button, index) => {
+      latestGamepadState.buttons.forEach((button, index) => {
         gamepadButtons[index] = button.pressed;
       });
       gamepadAxes = {};
-      gamepad.axes.forEach((axis, index) => {
-        gamepadAxes[index] = axis;
+      latestGamepadState.axes.forEach((axis, index) => {
+        // Apply deadzone directly here for simplicity
+        gamepadAxes[index] = Math.abs(axis) > GAMEPAD_DEADZONE ? axis : 0;
       });
     }
 
+
     // Helper to check if a button was just pressed this frame
     function wasButtonPressed(buttonIndex) {
-      return gamepadButtons[buttonIndex] && !previousGamepadButtons[buttonIndex];
+      // Check if the button exists in the current state before accessing
+      return gamepadButtons.hasOwnProperty(buttonIndex) && gamepadButtons[buttonIndex] &&
+        (!previousGamepadButtons.hasOwnProperty(buttonIndex) || !previousGamepadButtons[buttonIndex]);
     }
 
     // --- Game Logic ---
 
     // Handles input specifically for the difficulty selection screen
     function processDifficultyInput() {
-      if (!gamepad) return;
+      // Check if a gamepad is connected (via gamepadIndex)
+      if (gamepadIndex === null) return;
 
       let moved = false;
+      // Use the globally updated gamepadAxes/Buttons which are fresh
       const stickY = gamepadAxes[GAMEPAD_AXIS_LEFT_Y] || 0;
       const prevStickY = previousGamepadAxes[GAMEPAD_AXIS_LEFT_Y] || 0;
 
       // D-pad Up / Left Stick Up (Check for transition past deadzone)
+      // Use GAMEPAD_AXIS_DEADZONE for menu navigation consistency
       if (wasButtonPressed(GAMEPAD_BUTTON_DPAD_UP) || (stickY < -GAMEPAD_AXIS_DEADZONE && prevStickY >= -GAMEPAD_AXIS_DEADZONE)) {
         selectedDifficultyIndex = (selectedDifficultyIndex - 1 + difficultyButtons.length) % difficultyButtons.length;
         moved = true;
@@ -1034,20 +1077,26 @@
       let accelInput = 0;
       let brakeInput = 0;
 
-      // 1. Gamepad Input (Highest Priority)
-      if (gamepad) {
-        const stickX = gamepadAxes[0] || 0;
-        if (Math.abs(stickX) > GAMEPAD_DEADZONE) {
+      // 1. Gamepad Input (Highest Priority - use globally updated states)
+      if (gamepadIndex !== null) {
+        const stickX = gamepadAxes[0] || 0; // Already has deadzone applied in updateGamepadState
+        if (stickX !== 0) { // Check if outside deadzone
           steerInput = -stickX;
         } else {
           if (gamepadButtons[GAMEPAD_BUTTON_DPAD_LEFT]) steerInput = 1.0;
           if (gamepadButtons[GAMEPAD_BUTTON_DPAD_RIGHT]) steerInput = -1.0;
         }
 
-        const rightTrigger = gamepad.buttons[7]; // RT
-        if (rightTrigger) accelInput = rightTrigger.value;
-        const leftTrigger = gamepad.buttons[6]; // LT
-        if (leftTrigger) brakeInput = leftTrigger.value;
+        // Read trigger values directly from the LATEST state if available
+        // The global gamepad reference might be stale, but axes/buttons are updated
+        const currentPadState = navigator.getGamepads()[gamepadIndex];
+        if (currentPadState) {
+          const rightTrigger = currentPadState.buttons[7]; // RT
+          if (rightTrigger) accelInput = rightTrigger.value;
+          const leftTrigger = currentPadState.buttons[6]; // LT
+          if (leftTrigger) brakeInput = leftTrigger.value;
+        }
+
 
         // Restart Button (Start)
         if (wasButtonPressed(GAMEPAD_BUTTON_START)) {
@@ -1084,7 +1133,8 @@
 
     // Processes input on the Game Over screen
     function processGameOverInput() {
-      if (!gamepad) return;
+      // Check if a gamepad is connected (via gamepadIndex)
+      if (gamepadIndex === null) return;
       // Restart Button (Start or A)
       if (wasButtonPressed(GAMEPAD_BUTTON_START) || wasButtonPressed(GAMEPAD_BUTTON_A)) {
         handleRestartClick();
@@ -1239,7 +1289,7 @@
 
     function hitCheckpoint(checkpoint) {
       if (!gameActive || !checkpoint || !checkpoint.userData.active) return;
-      console.log(`Checkpoint ${checkpoint.userData.index + 1} hit!`);
+      // console.log(`Checkpoint ${checkpoint.userData.index + 1} hit!`); // Reduce console noise
       checkpoint.userData.active = false;
       checkpoint.material.color.setHex(0x00ff00); // Green
       checkpoint.material.opacity = 0.3;
@@ -1258,7 +1308,7 @@
       if (!gameActive) return;
       carHealth -= amount;
       carHealth = Math.max(0, carHealth); // Clamp at 0
-      console.log(`Damage taken, health: ${carHealth}`);
+      // console.log(`Damage taken, health: ${carHealth}`); // Reduce console noise
       updateDamageUI(); // Updates UI and car color
 
       // Visual feedback: Flash effect
@@ -1282,7 +1332,7 @@
       if (!gameActive || !heart || !heart.parent) return;
       carHealth += HEART_REPAIR;
       carHealth = Math.min(MAX_HEALTH, carHealth); // Clamp at max health
-      console.log(`Heart collected, health: ${carHealth}`);
+      // console.log(`Heart collected, health: ${carHealth}`); // Reduce console noise
       updateDamageUI(); // Update UI and car color
 
       scene.remove(heart);
@@ -1395,7 +1445,7 @@
             object.parent.remove(object);
           }
         });
-        console.log("Scene objects disposed and removed.");
+        // console.log("Scene objects disposed and removed."); // Reduce console noise
       }
       if (renderer) {
         renderer.dispose(); // Dispose WebGL context
@@ -1403,7 +1453,7 @@
           renderer.domElement.parentNode.removeChild(renderer.domElement); // Remove canvas
         }
         renderer = null;
-        console.log("Renderer disposed and canvas removed.");
+        // console.log("Renderer disposed and canvas removed."); // Reduce console noise
       }
 
       // Clear references
@@ -1419,13 +1469,8 @@
     function animate() {
       animationFrameId = requestAnimationFrame(animate); // Keep the loop running
 
-      // 1. Update Gamepad State
-      if (navigator.getGamepads) {
-        const gamepads = navigator.getGamepads();
-        if (gamepads[0] && !gamepad) {handleGamepadConnect({gamepad: gamepads[0]});}
-        else if (gamepad && !gamepads[gamepad.index]) {handleGamepadDisconnect({gamepad: gamepad});}
-        if (gamepad) {updateGamepadState();}
-      }
+      // 1. Update Gamepad State (Handles connect/disconnect and reads fresh data)
+      updateGamepadState();
 
       // 2. Process Input based on Current Screen
       switch (currentScreen) {
