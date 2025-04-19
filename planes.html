@@ -250,9 +250,10 @@
 
     // --- Global Variables ---
     let scene, camera, renderer;
-    let car, carBody, wheels = [], house, ground, roadMesh;
-    let obstacles = [], hearts = [], checkpoints = [], fences = []; // Added fences array
+    let car, carBody, wheels = [], house, ground, roadMesh, secondaryRoadMesh; // Added secondaryRoadMesh
+    let obstacles = [], hearts = [], checkpoints = [], fences = []; // fences array holds COLLISION BOXES for ALL fences
     let keys = {}; // Keyboard state
+    let raycaster; // For ground detection
 
     // Input State
     let gamepad = null; // Store REFERENCE to the active gamepad object (may become stale in Chrome)
@@ -286,10 +287,14 @@
     const BASE_ROAD_WIDTH = 5; // Base width unit
     const ROAD_WIDTH_MULTIPLIER = 3; // Road is 3x base width
     const ACTUAL_ROAD_WIDTH = BASE_ROAD_WIDTH * ROAD_WIDTH_MULTIPLIER;
+    const SECONDARY_ROAD_WIDTH = ACTUAL_ROAD_WIDTH * 0.8; // Slightly narrower
     const FENCE_OFFSET = 0.5; // How far from the road edge the fence is placed
     const FENCE_HEIGHT = 1.5;
     const FENCE_THICKNESS = 0.2;
     const FENCE_POST_EVERY = 3; // Place a post every N meters along the road
+    const OVERPASS_HEIGHT = 6; // How high the overpass goes
+    const OVERPASS_START_T = 0.4; // Start overpass at 40% along the primary road's parameter t
+    const OVERPASS_END_T = 0.6; // End overpass at 60% along the primary road's parameter t
 
     const GAMEPAD_DEADZONE = 0.15; // Deadzone for analog sticks
     const TILT_SENSITIVITY = 0.002; // Adjust for tilt steering sensitivity
@@ -422,7 +427,7 @@
         carHealth = MAX_HEALTH; // Reset health
         velocity = 0; steeringAngle = 0;
         nextCheckpointIndex = 0; totalCheckpoints = 0;
-        obstacles = []; hearts = []; checkpoints = []; fences = []; // Reset fences
+        obstacles = []; hearts = []; checkpoints = []; fences = []; // Reset fences (collision boxes)
         keys = {};
         // Don't reset gamepad/gamepadIndex here, keep connection if already established
         tiltGamma = 0; touchGas = false; touchBrake = false;
@@ -442,23 +447,31 @@
         }
         gameContainerDiv.appendChild(renderer.domElement);
 
+        // Initialize Raycaster
+        raycaster = new THREE.Raycaster();
+
         // Lighting
         setupLighting();
 
         // Create Objects
         createGround();
-        const roadCurve = createRoad(settings); // Returns the curve
-        if (!roadCurve) throw new Error("Failed to create road curve.");
-        createFences(roadCurve, ACTUAL_ROAD_WIDTH); // Create fences along the curve
+        const primaryRoadCurve = createRoad(settings, ACTUAL_ROAD_WIDTH, 0x444444); // Returns the curve
+        if (!primaryRoadCurve) throw new Error("Failed to create primary road curve.");
+        createFences(primaryRoadCurve, ACTUAL_ROAD_WIDTH); // Create fences along the primary curve
+
+        const secondaryRoadCurve = createSecondaryRoad(settings, primaryRoadCurve); // Create secondary road
+        if (!secondaryRoadCurve) throw new Error("Failed to create secondary road curve.");
+        createFences(secondaryRoadCurve, SECONDARY_ROAD_WIDTH); // Create fences along the secondary curve
+
         createCar();
-        createHouse(roadCurve.getPoint(1)); // Place house at the end
-        createCheckpoints(roadCurve, settings);
+        createHouse(primaryRoadCurve.getPoint(1)); // Place house at the end of primary road
+        createCheckpoints(primaryRoadCurve, settings); // Checkpoints on primary road
         createObstacles(settings.obstacleCount);
         createHearts(settings.heartCount);
 
-        // Position Car/Camera at start
-        const startPoint = roadCurve.getPoint(0);
-        const tangent = roadCurve.getTangent(0).normalize();
+        // Position Car/Camera at start of primary road
+        const startPoint = primaryRoadCurve.getPoint(0);
+        const tangent = primaryRoadCurve.getTangent(0).normalize();
         car.position.set(startPoint.x, wheelRadius + ROAD_Y_OFFSET, startPoint.z);
         car.lookAt(startPoint.x + tangent.x, wheelRadius + ROAD_Y_OFFSET, startPoint.z + tangent.z);
         updateCameraPosition();
@@ -504,7 +517,7 @@
       scene.add(directionalLight);
     }
 
-    // --- Object Creation Functions (Unchanged from previous version) ---
+    // --- Object Creation Functions ---
     function createGround() {
       const groundSize = 300;
       const groundGeometry = new THREE.PlaneGeometry(groundSize, groundSize);
@@ -513,35 +526,18 @@
       ground.rotation.x = -Math.PI / 2;
       ground.receiveShadow = true;
       scene.add(ground);
-      // console.log("Ground created."); // Reduce console noise
     }
-    function createRoad(settings) {
-      // console.log("Creating road..."); // Reduce console noise
-      const roadWidth = ACTUAL_ROAD_WIDTH;
-      const roadSegments = settings.roadPoints * 10; // More segments for smoother curve
 
-      // Generate curve points
-      const points = [new THREE.Vector3(0, ROAD_Y_OFFSET, 0)];
-      const roadLength = 150;
-      const roadWidthVariance = 80; // Max deviation from center
-      for (let i = 1; i <= settings.roadPoints; i++) {
-        const z = (i / settings.roadPoints) * roadLength;
-        const xVariance = (Math.random() - 0.5) * settings.roadVariance * (i / settings.roadPoints);
-        const clampedX = Math.max(-roadWidthVariance / 2, Math.min(roadWidthVariance / 2, xVariance));
-        points.push(new THREE.Vector3(clampedX, ROAD_Y_OFFSET, z));
-      }
-      if (points.length < 2) {console.error("Not enough points for road curve."); points.push(new THREE.Vector3(0, ROAD_Y_OFFSET, 10));}
-
-      const curve = new THREE.CatmullRomCurve3(points);
-
-      // Create road mesh geometry
+    // Helper function to create road mesh geometry from a curve
+    function createRoadMesh(curve, roadWidth, roadColor, roadSegments) {
       const curvePoints = curve.getPoints(roadSegments);
       const vertices = []; const normals = []; const uvs = []; const indices = [];
 
       for (let i = 0; i <= roadSegments; i++) {
+        const t = i / roadSegments;
         const point = curvePoints[i];
-        const tangent = curve.getTangentAt(i / roadSegments).normalize();
-        const normal = new THREE.Vector3(-tangent.z, 0, tangent.x); // Perpendicular vector on the XZ plane
+        const tangent = curve.getTangentAt(t).normalize();
+        const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize(); // Perpendicular vector on the XZ plane
 
         // Calculate left and right vertices for this point
         const vL = new THREE.Vector3().copy(point).addScaledVector(normal, roadWidth / 2);
@@ -550,8 +546,8 @@
         vertices.push(vL.x, vL.y, vL.z); // Left vertex
         vertices.push(vR.x, vR.y, vR.z); // Right vertex
 
-        normals.push(0, 1, 0); normals.push(0, 1, 0); // Normal points straight up
-        uvs.push(0, i / roadSegments); uvs.push(1, i / roadSegments); // UVs for texturing
+        normals.push(0, 1, 0); normals.push(0, 1, 0); // Normal points straight up (approximate for curved roads)
+        uvs.push(0, t); uvs.push(1, t); // UVs for texturing
       }
 
       // Create faces (indices)
@@ -572,16 +568,117 @@
       geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
       geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
       geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+      geometry.computeVertexNormals(); // Compute normals properly for lighting on slopes
 
-      const roadMaterial = new THREE.MeshStandardMaterial({color: 0x444444, side: THREE.DoubleSide});
-      roadMesh = new THREE.Mesh(geometry, roadMaterial);
-      roadMesh.receiveShadow = true; // Road can receive shadows
-      roadMesh.castShadow = false; // Road itself doesn't cast significant shadows
-      scene.add(roadMesh);
+      const roadMaterial = new THREE.MeshStandardMaterial({color: roadColor, side: THREE.DoubleSide});
+      const mesh = new THREE.Mesh(geometry, roadMaterial);
+      mesh.receiveShadow = true; // Road can receive shadows
+      mesh.castShadow = false; // Road itself doesn't cast significant shadows
+      scene.add(mesh);
+      return mesh; // Return the created mesh
+    }
 
-      // console.log("Road created successfully."); // Reduce console noise
+    // Creates the primary (flat) road
+    function createRoad(settings, roadWidth, roadColor) {
+      const roadSegments = settings.roadPoints * 10; // More segments for smoother curve
+
+      // Generate curve points for a flat, winding road
+      const points = [new THREE.Vector3(0, ROAD_Y_OFFSET, 0)];
+      const roadLength = 150;
+      const roadWidthVariance = 80; // Max deviation from center
+      for (let i = 1; i <= settings.roadPoints; i++) {
+        const z = (i / settings.roadPoints) * roadLength;
+        const xVariance = (Math.random() - 0.5) * settings.roadVariance * (i / settings.roadPoints);
+        const clampedX = Math.max(-roadWidthVariance / 2, Math.min(roadWidthVariance / 2, xVariance));
+        points.push(new THREE.Vector3(clampedX, ROAD_Y_OFFSET, z));
+      }
+      if (points.length < 2) {console.error("Not enough points for road curve."); points.push(new THREE.Vector3(0, ROAD_Y_OFFSET, 10));}
+
+      const curve = new THREE.CatmullRomCurve3(points);
+
+      // Create road mesh geometry using helper function
+      roadMesh = createRoadMesh(curve, roadWidth, roadColor, roadSegments); // Assign to global roadMesh
+
+      return curve; // Return the curve for fence placement etc.
+    }
+
+    // Creates the secondary road with weaving and an overpass
+    function createSecondaryRoad(settings, primaryCurve) {
+      const roadWidth = SECONDARY_ROAD_WIDTH;
+      const roadColor = 0x555555; // Darker grey
+      const roadSegments = settings.roadPoints * 10; // Same segments as primary for alignment
+      const baseOffset = ACTUAL_ROAD_WIDTH * 1.2; // Base distance from primary road
+      const weaveFrequency = 2.5; // How many weaves along the length
+      const weaveAmplitude = ACTUAL_ROAD_WIDTH * 0.8; // How far it weaves side-to-side
+
+      const points = [];
+      const minCenterlineDistance = (ACTUAL_ROAD_WIDTH / 2) + (SECONDARY_ROAD_WIDTH / 2); // Minimum distance between centerlines
+
+      // Helper for smooth interpolation (cosine interpolation)
+      function cosineInterpolate(y1, y2, mu) {
+        const mu2 = (1 - Math.cos(mu * Math.PI)) / 2;
+        return (y1 * (1 - mu2) + y2 * mu2);
+      }
+
+      // Calculate the offset just before and just after the overpass for interpolation
+      const offsetBeforeOverpass = baseOffset + Math.sin(OVERPASS_START_T * Math.PI * weaveFrequency) * weaveAmplitude;
+      const offsetAfterOverpassTarget = -baseOffset + Math.sin(OVERPASS_END_T * Math.PI * weaveFrequency) * weaveAmplitude; // Target offset on the opposite side
+
+      // Generate points based on the primary curve
+      const numPoints = settings.roadPoints * 5; // Use more points for smoother secondary curve
+      for (let i = 0; i <= numPoints; i++) {
+        const t = i / numPoints; // Parameter along the primary curve (0 to 1)
+        const primaryPoint = primaryCurve.getPointAt(t);
+        const primaryTangent = primaryCurve.getTangentAt(t).normalize();
+        const primaryNormal = new THREE.Vector3(-primaryTangent.z, 0, primaryTangent.x).normalize(); // Normal on XZ plane
+
+        let sideOffset;
+        let yOffset = ROAD_Y_OFFSET;
+        const isOnOverpass = (t >= OVERPASS_START_T && t <= OVERPASS_END_T);
+        const overpassProgress = isOnOverpass ? (t - OVERPASS_START_T) / (OVERPASS_END_T - OVERPASS_START_T) : 0;
+
+        if (t < OVERPASS_START_T) {
+          // Before overpass: Weave on the initial side
+          sideOffset = baseOffset + Math.sin(t * Math.PI * weaveFrequency) * weaveAmplitude;
+          // Apply overlap prevention
+          if (Math.abs(sideOffset) < minCenterlineDistance) {
+            sideOffset = Math.sign(sideOffset || 1) * minCenterlineDistance;
+          }
+        } else if (isOnOverpass) {
+          // During overpass: Interpolate horizontal offset and apply vertical offset
+          sideOffset = cosineInterpolate(offsetBeforeOverpass, offsetAfterOverpassTarget, overpassProgress);
+          yOffset += Math.sin(overpassProgress * Math.PI) * OVERPASS_HEIGHT;
+          // No overlap prevention during the crossover itself
+        } else { // t > OVERPASS_END_T
+          // After overpass: Weave on the opposite side
+          sideOffset = -baseOffset + Math.sin(t * Math.PI * weaveFrequency) * weaveAmplitude;
+          // Apply overlap prevention (relative to the new side)
+          if (Math.abs(sideOffset) < minCenterlineDistance) {
+            // Ensure it stays on the negative side if adjusted
+            sideOffset = Math.sign(sideOffset || -1) * minCenterlineDistance;
+          }
+        }
+
+        // Calculate the point for the secondary road
+        const secondaryPoint = new THREE.Vector3()
+          .copy(primaryPoint)
+          .addScaledVector(primaryNormal, sideOffset); // Apply calculated horizontal offset
+        secondaryPoint.y = yOffset; // Apply vertical offset
+
+        points.push(secondaryPoint);
+      }
+
+      if (points.length < 2) {console.error("Not enough points for secondary road curve."); return null;}
+
+      const curve = new THREE.CatmullRomCurve3(points);
+
+      // Create road mesh geometry using helper function
+      secondaryRoadMesh = createRoadMesh(curve, roadWidth, roadColor, roadSegments); // Assign to global secondaryRoadMesh
+
       return curve; // Return the curve for fence placement
     }
+
+    // Creates fences (visual and collision) along a given curve
     function createFences(curve, roadWidth) {
       // console.log("Creating fences..."); // Reduce console noise
       if (typeof THREE.BufferGeometryUtils === 'undefined') {
@@ -594,9 +691,9 @@
       const numFenceSegments = Math.floor(curve.getLength() / (FENCE_POST_EVERY / 2));
       const curvePoints = curve.getPoints(numFenceSegments);
 
-      const leftFenceGeometries = [];
-      const rightFenceGeometries = [];
-      fences = []; // Clear existing fences (used for collision)
+      const leftFenceGeometries = []; // Visual geometries
+      const rightFenceGeometries = []; // Visual geometries
+      // fences array is global and accumulates collision boxes from all calls
 
       // --- Reusable Geometry Definitions ---
       const postGeometry = new THREE.BoxGeometry(FENCE_THICKNESS * 1.5, FENCE_HEIGHT, FENCE_THICKNESS * 1.5);
@@ -610,6 +707,7 @@
       let lastPostDist = -FENCE_POST_EVERY; // Ensure first post is placed
 
       for (let i = 0; i < numFenceSegments; i++) {
+        const t = i / numFenceSegments; // Parameter at the start of the segment
         const p1 = curvePoints[i];
         const p2 = curvePoints[i + 1] || p1; // Use p1 if it's the last point
         const segmentLength = p1.distanceTo(p2);
@@ -617,59 +715,62 @@
 
         // Use the midpoint and tangent for more stable orientation/positioning
         const segmentMidpoint = new THREE.Vector3().lerpVectors(p1, p2, 0.5);
-        const tangent = new THREE.Vector3().subVectors(p2, p1).normalize(); // Direction of the segment
-        const normal = new THREE.Vector3(-tangent.z, 0, tangent.x); // Outward normal from road center
+        // Get tangent slightly offset into the segment for better accuracy on curves
+        const tangentT = Math.min(1, t + 0.5 / numFenceSegments);
+        const tangent = curve.getTangentAt(tangentT).normalize();
+        const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize(); // Outward normal from road center on XZ plane
 
         // Calculate fence line positions at the segment midpoint
         const leftFenceLinePos = new THREE.Vector3().copy(segmentMidpoint).addScaledVector(normal, roadWidth / 2 + FENCE_OFFSET);
         const rightFenceLinePos = new THREE.Vector3().copy(segmentMidpoint).addScaledVector(normal, -(roadWidth / 2 + FENCE_OFFSET));
 
         // --- Create Collision Geometry (Invisible Boxes per segment) ---
-        const collisionFenceHeight = FENCE_HEIGHT * 1.5;
-        // Collision box length matches segment length
-        const collisionFenceGeom = new THREE.BoxGeometry(segmentLength, collisionFenceHeight, FENCE_THICKNESS * 2);
+        const collisionFenceHeight = FENCE_HEIGHT * 1.5; // Make collision box taller
+        // Collision box aligned with the tangent: Width (across road normal), Height, Length (along tangent)
+        const collisionFenceGeom = new THREE.BoxGeometry(FENCE_THICKNESS * 2, collisionFenceHeight, segmentLength);
         const collisionMaterial = new THREE.MeshBasicMaterial({visible: false, transparent: true, opacity: 0}); // Invisible
 
         // Left Collision Fence Segment
         const leftCollisionMesh = new THREE.Mesh(collisionFenceGeom, collisionMaterial);
         leftCollisionMesh.position.copy(leftFenceLinePos); // Position at midpoint of fence line segment
-        leftCollisionMesh.position.y = collisionFenceHeight / 2 + ROAD_Y_OFFSET;
-        leftCollisionMesh.lookAt(leftCollisionMesh.position.clone().add(tangent)); // Align with segment direction
-        leftCollisionMesh.userData.normal = normal.clone(); // Store outward normal
+        leftCollisionMesh.position.y = segmentMidpoint.y + collisionFenceHeight / 2; // Adjust Y based on road height at midpoint
+        leftCollisionMesh.lookAt(leftCollisionMesh.position.clone().add(tangent)); // Align Z axis with segment direction
+        leftCollisionMesh.userData.normal = normal.clone(); // Store outward normal (points away from road)
         scene.add(leftCollisionMesh);
-        fences.push(leftCollisionMesh);
+        fences.push(leftCollisionMesh); // Add to global fences array
 
         // Right Collision Fence Segment
         const rightCollisionMesh = new THREE.Mesh(collisionFenceGeom.clone(), collisionMaterial);
         rightCollisionMesh.position.copy(rightFenceLinePos);
-        rightCollisionMesh.position.y = collisionFenceHeight / 2 + ROAD_Y_OFFSET;
+        rightCollisionMesh.position.y = segmentMidpoint.y + collisionFenceHeight / 2; // Adjust Y based on road height at midpoint
         rightCollisionMesh.lookAt(rightCollisionMesh.position.clone().add(tangent));
-        rightCollisionMesh.userData.normal = normal.clone().negate(); // Store outward normal
+        rightCollisionMesh.userData.normal = normal.clone().negate(); // Store outward normal (points away from road)
         scene.add(rightCollisionMesh);
-        fences.push(rightCollisionMesh);
+        fences.push(rightCollisionMesh); // Add to global fences array
 
 
         // --- Create Visible Geometry (Posts and Rails) ---
-        const currentDistance = curve.getUtoTmapping(i / numFenceSegments, curve.getLength()); // Get distance at start of segment
+        const currentDistance = curve.getUtoTmapping(t, curve.getLength()); // Get distance at start of segment
 
         // Place Posts periodically based on distance along the curve
         if (currentDistance >= lastPostDist + FENCE_POST_EVERY) {
-          const postOffsetY = FENCE_HEIGHT / 2 + ROAD_Y_OFFSET;
+          const postOffsetY = FENCE_HEIGHT / 2;
           // Use the starting point of the segment (p1) for post position
-          // Recalculate normal/tangent at p1 for more accurate post placement
-          const postTangent = curve.getTangentAt(i / numFenceSegments).normalize();
-          const postNormal = new THREE.Vector3(-postTangent.z, 0, postTangent.x);
+          // Recalculate normal/tangent at p1 (t) for more accurate post placement
+          const postTangent = curve.getTangentAt(t).normalize();
+          const postNormal = new THREE.Vector3(-postTangent.z, 0, postTangent.x).normalize();
           const leftPostPos = new THREE.Vector3().copy(p1).addScaledVector(postNormal, roadWidth / 2 + FENCE_OFFSET);
           const rightPostPos = new THREE.Vector3().copy(p1).addScaledVector(postNormal, -(roadWidth / 2 + FENCE_OFFSET));
 
           // Left Post
           const leftPostGeom = postGeometry.clone();
-          leftPostGeom.translate(leftPostPos.x, postOffsetY, leftPostPos.z);
+          // Apply position directly, no translation needed if geometry is centered
+          leftPostGeom.translate(leftPostPos.x, p1.y + postOffsetY, leftPostPos.z); // Use p1.y for post base height
           leftFenceGeometries.push(leftPostGeom);
 
           // Right Post
           const rightPostGeom = postGeometry.clone();
-          rightPostGeom.translate(rightPostPos.x, postOffsetY, rightPostPos.z);
+          rightPostGeom.translate(rightPostPos.x, p1.y + postOffsetY, rightPostPos.z); // Use p1.y for post base height
           rightFenceGeometries.push(rightPostGeom);
 
           lastPostDist = currentDistance; // Update last post distance
@@ -687,7 +788,8 @@
             tempMesh.geometry = baseRailGeometry; // Assign base geometry (length 1)
             tempMesh.scale.set(1, 1, segmentLength); // Scale Z to match segment length
             tempMesh.rotation.y = railRotation; // Set rotation
-            tempMesh.position.set(leftFenceLinePos.x, railY + ROAD_Y_OFFSET, leftFenceLinePos.z); // Set position at midpoint
+            // Position rail based on segment midpoint Y + rail offset Y
+            tempMesh.position.set(leftFenceLinePos.x, segmentMidpoint.y + railY, leftFenceLinePos.z);
             tempMesh.updateMatrix(); // Calculate the world matrix
 
             // Clone the base geometry and apply the transformation
@@ -697,7 +799,7 @@
 
             // --- Right Rail ---
             // Reuse tempMesh, just update position
-            tempMesh.position.set(rightFenceLinePos.x, railY + ROAD_Y_OFFSET, rightFenceLinePos.z); // Position at midpoint
+            tempMesh.position.set(rightFenceLinePos.x, segmentMidpoint.y + railY, rightFenceLinePos.z);
             tempMesh.updateMatrix(); // Recalculate matrix with new position
 
             const finalRightRailGeom = baseRailGeometry.clone();
@@ -742,8 +844,9 @@
         }
       }
 
-      // console.log(`Fences created. ${fences.length} collision segments.`); // Reduce console noise
+      // console.log(`Fences created. ${fences.length} total collision segments.`); // Log total collision segments
     }
+
     function createCar() {
       car = new THREE.Group();
 
@@ -1143,7 +1246,7 @@
 
 
     function updateCarMovement() {
-      if (!gameActive || !car) return;
+      if (!gameActive || !car || !raycaster) return; // Added raycaster check
 
       const input = processGameplayInput();
       if (!input) return; // Input handler might return null if restarting
@@ -1178,7 +1281,36 @@
       // Update Position based on forward vector
       const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(car.quaternion);
       car.position.addScaledVector(forward, velocity);
-      car.position.y = wheelRadius + ROAD_Y_OFFSET; // Keep car on road level
+
+      // --- Determine Ground Height using Raycasting ---
+      const rayOrigin = new THREE.Vector3(car.position.x, car.position.y + 5, car.position.z); // Start ray above car
+      const rayDirection = new THREE.Vector3(0, -1, 0); // Point down
+      raycaster.set(rayOrigin, rayDirection);
+
+      const roadMeshes = [];
+      if (roadMesh) roadMeshes.push(roadMesh);
+      if (secondaryRoadMesh) roadMeshes.push(secondaryRoadMesh);
+
+      let groundY = ROAD_Y_OFFSET; // Default ground height
+
+      if (roadMeshes.length > 0) {
+        const intersects = raycaster.intersectObjects(roadMeshes);
+
+        if (intersects.length > 0) {
+          // Find the highest intersection point (important for overpasses)
+          let highestPointY = -Infinity;
+          intersects.forEach(intersect => {
+            if (intersect.point.y > highestPointY) {
+              highestPointY = intersect.point.y;
+            }
+          });
+          groundY = highestPointY; // Set ground height to the highest point found
+        }
+      }
+
+      // Set car's Y position based on detected ground height + wheel radius
+      car.position.y = groundY + wheelRadius;
+      // --- End Ground Height Determination ---
 
       // Wheel rotation
       const wheelRotation = velocity / wheelRadius;
@@ -1252,7 +1384,7 @@
         }
       });
 
-      // Fence collision
+      // Fence collision (Checks all fence segments from both roads)
       fences.forEach(fenceSegment => {
         if (!fenceSegment.parent) return; // Skip removed/invisible segments
         // Update fence segment's world matrix (important for Box3)
@@ -1458,8 +1590,10 @@
 
       // Clear references
       scene = null; camera = null; car = null; carBody = null; house = null;
-      ground = null; roadMesh = null; wheels = []; obstacles = []; hearts = []; checkpoints = []; fences = []; // Clear fences
+      ground = null; roadMesh = null; secondaryRoadMesh = null; // Clear secondary road mesh
+      wheels = []; obstacles = []; hearts = []; checkpoints = []; fences = []; // Clear fences
       keys = {}; tiltGamma = 0; touchGas = false; touchBrake = false;
+      raycaster = null; // Clear raycaster
 
       console.log("Cleanup complete.");
     }
